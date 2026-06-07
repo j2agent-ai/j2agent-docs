@@ -9,8 +9,8 @@
 - 图片在**发送消息时**由服务端写入对象存储（前端仅本地预览，WebSocket 携带 Base64 `data` 字段）；对象键规则为 `chat/{userId}/{contextId}/{UUIDv7}_{文件名}`。
 - 仅当前用户可引用自己的对象键；发送消息时新路径还须属于当前 `contextId`。
 - 用户消息通过 WebSocket 携带 `attachments`（`ChatAttachmentDto` 列表）；纯图片消息允许文本为空。
-- 历史消息在 `chat_context_item.meta_json` 中持久化附件元数据；列表展示使用稳定 URL `/v1/rest/j2agent/chat/files/content?objectKey=...`（**同源代理**返回图片字节，不 302 到 MinIO，避免 iOS/移动端无法访问内网预签名地址）。
-- 向 LLM 投递时，后端从对象存储 **读取字节** 构造 Spring AI `Media`，**不使用** 预签名 URL（避免云端模型无法访问内网 MinIO 导致 `InvalidParameter`）。
+- 历史消息在 `chat_context_item.meta_json` 中持久化附件元数据（仅 `objectKey` 等，不存 URL）；展示 URL 由 `j2agent.storage.chat-attachment-display` 配置（见 §2.1）。
+- 向 LLM 投递时，后端从对象存储 **读取字节** 构造 Spring AI `Media`（仅此一步经服务器，无法省略）。
 - 被聊天引用的对象文件在文件管理页 **不可删除**（`409 Conflict: file is referenced by business data`）；删除会话记忆时会清理引用记录，并在整 context 删除时清扫 OSS 对象与 `object_file` 台账。
 
 依赖 `j2agent.storage.enabled=true` 且对象存储服务可用；未启用时带图对话会报错 `Object storage is required for image input`。
@@ -24,6 +24,37 @@
 
 工具类：`ChatFileKeys`（前缀生成、`requireOwnedKey` / `requireOwnedKeyForReference`）。
 
+### 2.1 聊天图片展示模式
+
+配置项 `j2agent.storage.chat-attachment-display`（环境变量 `J2AGENT_CHAT_ATTACHMENT_DISPLAY`）：
+
+| 值 | 说明 | 适用场景 |
+|---|---|---|
+| `proxy`（**默认**） | 返回同源 `/chat/files/content?objectKey=...`，图片经应用服务器转发 | 未配 MinIO 公网地址、或需避免预签名 host 问题 |
+| `direct` | 返回 OSS **预签名直链**（24h），浏览器直连 MinIO，省服务器带宽 | 已配 `minio.public-endpoint` 为客户端可达地址 |
+
+**direct 模式示例**（局域网 IP `192.168.3.4`，MinIO 映射端口 `19000`）：
+
+```yaml
+j2agent:
+  storage:
+    chat-attachment-display: direct
+    minio:
+      endpoint: http://127.0.0.1:19000
+      public-endpoint: http://192.168.3.4:19000
+```
+
+Docker `.env`：
+
+```bash
+J2AGENT_CHAT_ATTACHMENT_DISPLAY=direct
+J2AGENT_MINIO_PUBLIC_ENDPOINT=http://192.168.3.4:19000
+```
+
+**注意**：不可在前端把预签名 URL 的 `127.0.0.1` 改成局域网 IP（会破坏 SigV4 签名 → `SignatureDoesNotMatch`）。direct 模式必须由后端 `public-endpoint` 签出正确 host。
+
+direct 模式下若 OSS 直链仍失败，前端 `img` 错误时会自动降级为 `proxy` 的 content URL。
+
 ## 3. 数据模型
 
 ### 3.1 `ChatAttachmentDto`
@@ -36,7 +67,7 @@ OpenAPI 定义见 `j2agent-model/src/main/resources/openapi-model.yaml`：
 | `name` | 原始文件名（展示名，不含 UUID 前缀） |
 | `contentType` | MIME 类型 |
 | `size` | 字节大小 |
-| `url` | 前端/历史展示用稳定内容地址 |
+| `url` | 展示用 URL（由 `chat-attachment-display` 决定：OSS 预签名直链或 content 代理）；不写入持久化 meta_json |
 | `data` | Base64 编码的图片字节，**仅 WebSocket 发送时使用**，服务端上传 OSS 后不持久化 |
 
 `MessageDto.attachments` 仅用户消息使用。
@@ -61,8 +92,8 @@ OpenAPI 定义见 `j2agent-model/src/main/resources/openapi-model.yaml`：
 | 方法 | 路径 | 说明 |
 |---|---|---|
 | `POST` | `/chat/files?context-id=` | （兼容）直接上传图片（multipart `file`），返回 `ChatAttachmentDto`；主流程已改为发送时服务端上传 |
-| `GET` | `/chat/files/preview?objectKey=` | 获取短期签名预览 URL |
-| `GET` | `/chat/files/content?objectKey=` | 返回图片字节（需登录），供历史气泡 `<img>` 使用；**不** 302 到 OSS |
+| `GET` | `/chat/files/preview?objectKey=` | 按 `chat-attachment-display` 返回展示 URL（与历史/NOTICE 一致） |
+| `GET` | `/chat/files/content?objectKey=` | PROXY 模式展示地址；亦作 DIRECT 模式失败时的降级 |
 
 校验规则（`ChatFileController`）：
 
@@ -83,16 +114,24 @@ sequenceDiagram
     participant OSS as 对象存储
     participant LLM as 视觉 LLM
 
-    UI->>UI: 本地预览（blob URL）
+    UI->>UI: 本地预览（blob URL，仅输入区）
     UI->>API: WebSocket ChatRequestDto + attachments.data（Base64）
     API->>OSS: putObject chat/userId/contextId/uuid_file
+    API-->>UI: NOTICE user-attachments-ready（展示 URL，见 chat-attachment-display）
     API->>API: validateAndReference + object_file_reference
-    API->>OSS: getObject 读字节
+    API->>OSS: getObject 读字节（仅 LLM 推理）
     API->>LLM: UserMessage.media（base64/Resource）
-    API->>API: encode 记忆 meta_json.attachments（objectKey + stable url）
+    API->>API: encode 记忆 meta_json.attachments（objectKey，不含 url）
+    alt direct 模式
+        UI->>OSS: 气泡 <img> 直连预签名 URL
+    else proxy 模式
+        UI->>API: 气泡 <img> GET /chat/files/content
+    end
 ```
 
-前端实现：`j2agent-ui/src/pages/chat/chatImageProcess.ts`（格式转 JPEG + 压缩）、`ChatView.vue`（处理中占位与禁发）；不再调用 `POST /chat/files` 预上传。
+前端直接使用后端下发的 `attachment.url`；DIRECT 模式加载失败时降级 `/chat/files/content`。
+
+后端：`ChatAttachmentUrlResolver` 按 `chat-attachment-display` 生成展示 URL；`GET /context` 与 WS NOTICE 均经此解析。
 
 后端核心类：
 
@@ -107,7 +146,7 @@ sequenceDiagram
 
 ### 历史消息展示
 
-`GET /context` 经 `ChatContextService` → `Translator.translateToChatContextDto` 返回消息列表。用户消息的附件来自 `chat_context_item.meta_json.attachments`（经 codec 解码后挂在 `UserMessage.metadata`）。前端历史与实时共用 `message.attachments` 渲染；图片 URL 为 `/v1/rest/j2agent/chat/files/content?objectKey=...`（需登录态，302 到签名 URL）。
+`GET /context` 返回前由 `ChatAttachmentUrlResolver` 为每条消息的附件填充 OSS 预签名直链。持久化仅存 `objectKey`；发送成功后 WS `user-attachments-ready` 同样下发预签名 URL，实时气泡与历史展示一致。
 
 ## 6. 删除对话时的 OSS 清理
 
@@ -137,7 +176,7 @@ sequenceDiagram
 7. 删除单条历史对话 → 该 context 下 OSS 对象与 `object_file` 记录被清理。
 8. 选择图片但未发送即删除对话 → 前缀清扫不会误删（发送前无 OSS 对象）；发送后删除对话仍会清扫。
 9. 对话页上传 PNG/JPEG，发送「描述这张图片」类问题，视觉模型应正常回复。
-10. 刷新页面后历史气泡仍能展示图片（走 `/chat/files/content`）。
+10. 刷新页面后历史气泡仍能展示图片（`<img>` 直连 OSS 预签名 URL）。
 
 ## 9. 常见问题
 
@@ -168,9 +207,11 @@ sequenceDiagram
 
 附件 `objectKey` 对应台账非 `READY`，或类型/大小/Base64 校验失败。重新选择图片并发送。
 
-### 9.4 历史图片无法显示
+### 9.4 历史图片无法显示 / SignatureDoesNotMatch
 
-- 稳定 URL 需登录态；由后端从 OSS 读取并返回图片字节（避免 iOS Safari 跟随 302 到 `127.0.0.1` 等不可达地址）。
+- **proxy 模式（默认）**：展示走 `/chat/files/content?objectKey=...`，只需应用服务器可达，不依赖 MinIO 预签名。
+- **direct 模式**：需配置 `minio.public-endpoint` 为浏览器可达地址；**禁止**在前端改写预签名 URL 的 host（会导致 `SignatureDoesNotMatch`）。
+- DIRECT 模式 OSS 加载失败时，前端会自动降级为 content 代理。
 - 对象已被误删则无法恢复展示。
 
 ### 9.4.1 iOS 选图后无预览 / 发送失败
