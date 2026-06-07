@@ -30,8 +30,8 @@
 
 | 值 | 说明 | 适用场景 |
 |---|---|---|
-| `proxy`（**默认**） | 返回同源 `/chat/files/content?objectKey=...`，图片经应用服务器转发 | 未配 MinIO 公网地址、或需避免预签名 host 问题 |
-| `direct` | 返回 OSS **预签名直链**（24h），浏览器直连 MinIO，省服务器带宽 | 已配 `minio.public-endpoint` 为客户端可达地址 |
+| `proxy`（**默认**） | 聊天：`/chat/files/content?objectKey=...`；文件管理预览：`/files/content?object-key=...`；经应用服务器转发 | MinIO `endpoint` 为内网地址（如 `127.0.0.1`、`minio:9000`），或需避免预签名 host 问题 |
+| `direct` | 返回 OSS **预签名直链**（聊天 24h / 文件管理 15min），浏览器直连 MinIO，省服务器带宽 | `minio.endpoint` 本身已是浏览器可达地址 |
 
 **direct 模式示例**（局域网 IP `192.168.3.4`，MinIO 映射端口 `19000`）：
 
@@ -40,20 +40,21 @@ j2agent:
   storage:
     chat-attachment-display: direct
     minio:
-      endpoint: http://127.0.0.1:19000
-      public-endpoint: http://192.168.3.4:19000
+      endpoint: http://192.168.3.4:19000   # 预签名 URL 的 host 即此地址，须客户端可访问
 ```
 
 Docker `.env`：
 
 ```bash
 J2AGENT_CHAT_ATTACHMENT_DISPLAY=direct
-J2AGENT_MINIO_PUBLIC_ENDPOINT=http://192.168.3.4:19000
+J2AGENT_MINIO_ENDPOINT=http://192.168.3.4:19000
 ```
 
-**注意**：不可在前端把预签名 URL 的 `127.0.0.1` 改成局域网 IP（会破坏 SigV4 签名 → `SignatureDoesNotMatch`）。direct 模式必须由后端 `public-endpoint` 签出正确 host。
+**注意**：
 
-direct 模式下若 OSS 直链仍失败，前端 `img` 错误时会自动降级为 `proxy` 的 content URL。
+- 预签名 URL 的 host 由 `minio.endpoint` 决定；**不可**在前端把 URL 中的 host 改成别的地址（会破坏 SigV4 签名 → `SignatureDoesNotMatch`）。
+- Docker 内服务端常用 `http://minio:9000` 访问 MinIO，浏览器无法解析该 host，此类环境应使用 **proxy**（默认），不要指望 direct。
+- direct 模式下若 OSS 直链仍失败，前端会自动降级为 content 代理（聊天 `/chat/files/content`，文件管理 `/files/content`）。
 
 ## 3. 数据模型
 
@@ -146,7 +147,7 @@ sequenceDiagram
 
 ### 历史消息展示
 
-`GET /context` 返回前由 `ChatAttachmentUrlResolver` 为每条消息的附件填充 OSS 预签名直链。持久化仅存 `objectKey`；发送成功后 WS `user-attachments-ready` 同样下发预签名 URL，实时气泡与历史展示一致。
+`GET /context` 返回前由 `ChatAttachmentUrlResolver` 按 `chat-attachment-display` 为附件填充展示 URL（proxy 为 content 代理，direct 为 OSS 预签名）。持久化仅存 `objectKey`；发送成功后 WS `user-attachments-ready` 下发同一套 URL，实时气泡与历史展示一致。
 
 ## 6. 删除对话时的 OSS 清理
 
@@ -163,6 +164,8 @@ sequenceDiagram
 
 聊天图片占用默认 Bucket（`j2agent.storage.bucket`），**不会**出现在 `/#/files` 虚拟目录树中（前缀 `chat/` 与管理员文件管理 UI 分离），但对象与 `object_file` 台账仍由同一套对象存储服务维护。
 
+文件管理页「预览/下载」与聊天附件共用 `j2agent.storage.chat-attachment-display`：proxy 时走 `GET /files/content?object-key=...`，direct 时走 `GET /files/preview` 返回的预签名 URL。
+
 删除保护：`ObjectFileManagementService#delete` 在删除前检查 `ObjectFileReferenceService#isReferenced`。
 
 ## 8. 验收建议
@@ -176,7 +179,7 @@ sequenceDiagram
 7. 删除单条历史对话 → 该 context 下 OSS 对象与 `object_file` 记录被清理。
 8. 选择图片但未发送即删除对话 → 前缀清扫不会误删（发送前无 OSS 对象）；发送后删除对话仍会清扫。
 9. 对话页上传 PNG/JPEG，发送「描述这张图片」类问题，视觉模型应正常回复。
-10. 刷新页面后历史气泡仍能展示图片（`<img>` 直连 OSS 预签名 URL）。
+10. 刷新页面后历史气泡仍能展示图片（proxy 为 content URL，direct 为 OSS 预签名 URL）。
 
 ## 9. 常见问题
 
@@ -209,8 +212,8 @@ sequenceDiagram
 
 ### 9.4 历史图片无法显示 / SignatureDoesNotMatch
 
-- **proxy 模式（默认）**：展示走 `/chat/files/content?objectKey=...`，只需应用服务器可达，不依赖 MinIO 预签名。
-- **direct 模式**：需配置 `minio.public-endpoint` 为浏览器可达地址；**禁止**在前端改写预签名 URL 的 host（会导致 `SignatureDoesNotMatch`）。
+- **proxy 模式（默认）**：聊天走 `/chat/files/content?objectKey=...`，文件管理预览走 `/files/content?object-key=...`，只需应用服务器可达，不依赖 MinIO 预签名。
+- **direct 模式**：预签名 host 来自 `minio.endpoint`，该地址须对浏览器可达（勿使用 `127.0.0.1`、`minio:9000` 等仅服务端可访问的 endpoint）；**禁止**在前端改写预签名 URL 的 host（会导致 `SignatureDoesNotMatch`）。
 - DIRECT 模式 OSS 加载失败时，前端会自动降级为 content 代理。
 - 对象已被误删则无法恢复展示。
 
