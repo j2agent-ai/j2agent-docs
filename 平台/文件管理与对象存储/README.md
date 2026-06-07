@@ -206,7 +206,7 @@ MinIO 可在控制台或 `mc admin config set` 配置；阿里云 OSS 在 Bucket
 
 #### 后台延迟对账
 
-`init` 成功后，后端自动将台账投入 **Redisson 延迟队列**，在后台反复对账，默认 **10 次**、每次间隔 **30s**（总窗口约 **300s**，可配置，固定间隔而非指数退避）。仅当台账仍为 `UPLOADING` 时才继续对账；OSS 对象已就绪则自动更新为 `READY`；用户 `abort` 则同步删除并写入 Redis 取消标记，队列任务见到后停止；达到 `max-attempts` 仍无法完成则强制清理 OSS 与台账。
+`init` 成功后，后端自动将台账投入 **Redisson 延迟队列**，在后台反复对账，默认 **10 次**、每次间隔 **30s**（总窗口约 **300s**，可配置）。仅当台账仍为 `UPLOADING` 时才继续对账；OSS 对象已就绪则自动更新为 `READY`；用户 `abort` 则同步删除并写入 Redis 取消标记，队列任务见到后停止；达到 `max-attempts` 仍无法完成则强制清理 OSS 与台账。
 
 浏览器 **PUT 进行中**时，前端每 10 秒调用 `POST /files/upload/heartbeat` 刷新 Redis TTL；对账 Worker 检测到活跃心跳时 **保持 attempt=1 重入队**，不递增、不触发 forceCleanup。关页或 PUT 结束后心跳停止，TTL 过期后恢复正常 attempt 计数。
 
