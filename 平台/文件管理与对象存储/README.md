@@ -1,16 +1,16 @@
 # 文件管理与对象存储
 
-本文档说明 J2Agent 文件管理功能、对象存储供应商配置，以及对象存储和数据库台账之间的人工同步流程。
+本文档说明 J2Agent 文件管理功能、对象存储供应商配置，以及对象存储和数据库台账之间的差异检查与人工处置流程。
 
 ## 1. 功能范围
 
 - 仅 `ADMIN` 角色可访问首页入口、系统菜单和 `/files` 页面。
 - 首版只管理 `j2agent.storage.bucket` 配置的默认 Bucket，不支持页面切换 Bucket。
 - 支持虚拟目录、面包屑导航、名称搜索、状态筛选和分页。
-- 支持上传、短期签名 URL 预览/下载、单个删除和批量删除。
+- 支持单个或批量上传、短期签名 URL 预览/下载、单个删除和批量删除。
 - 支持浏览器直传对象存储（带上传进度），以及经后端中转上传（兼容保留）。
 - 支持 MinIO、阿里云 OSS、七牛云 Kodo 和 Cloudflare R2。
-- 同步扫描和差异处置均由管理员手动触发，不包含定时任务和云事件通知。
+- 差异检查和处置均由管理员手动触发，不包含定时检查和云事件通知。
 - 数据库仅保存对象元数据，不保存文件正文。
 
 对象键中的 `/` 用于构建虚拟目录。例如 `manual/images/logo.png` 会显示为 `manual / images / logo.png`，对象存储中不会额外创建目录对象。
@@ -136,26 +136,19 @@ R2_SECRET_ACCESS_KEY=
 
 只需要填写当前 `J2AGENT_STORAGE_TYPE` 对应的一组供应商参数。Bucket 需提前创建。
 
-## 3. 数据库迁移
+## 3. 数据库表
 
-升级已有环境时，Flyway 会执行：
-
-```text
-V0_2__object_storage_file_management.sql
-V0_3__object_storage_sync_in_progress_count.sql
-```
-
-`V0_3` 为同步任务表增加 `in_progress_count` 字段，用于统计 `IN_PROGRESS` 差异数量。
-
-新增三张表：
+文件管理功能使用以下三张表：
 
 | 表 | 作用 |
 |---|---|
-| `object_file` | 文件台账，以 `bucket_name + object_key_hash` 唯一 |
-| `object_storage_sync_task` | 持久化扫描任务、进度、统计和失败原因 |
-| `object_storage_sync_diff` | 保存扫描时两侧元数据快照和处置结果 |
+| `object_file` | 文件台账，记录供应商、Bucket、对象键、ETag、大小、类型、对象修改时间和操作状态，以 `bucket_name + object_key_hash` 唯一 |
+| `object_storage_sync_task` | 差异检查任务，记录任务状态、扫描进度、各差异类型数量、执行时间和失败原因 |
+| `object_storage_sync_diff` | 当前异常快照，记录 OSS 与数据库两侧元数据、差异类型、处置状态、处置动作和错误信息 |
 
 `object_key_hash` 是对象键的 SHA-256，仅用于建立稳定且长度可控的唯一索引；原始对象键仍完整保存在 `object_key`。
+
+差异明细只保存 `OSS_ONLY`、`DB_ONLY`、`METADATA_MISMATCH` 和 `IN_PROGRESS`。同一 Bucket 的下一次差异检查成功后，会使用新结果覆盖上一次异常快照。
 
 文件操作状态：
 
@@ -171,6 +164,8 @@ V0_3__object_storage_sync_in_progress_count.sql
 ### 上传
 
 前端默认使用**直传**流程，文件不经后端中转，适合大文件上传并显示真实进度。
+
+文件管理页面支持一次选择多个文件，默认最多并发上传 3 个。总进度按文件大小加权计算；点击总进度或“上传详情”可打开对话框，查看每个文件的名称、大小、状态和进度。单个文件发生同名冲突或上传失败时不会中断其他文件，全部完成后统一展示成功数量和失败文件名，并保留最近一次批量上传结果供查看。
 
 **直传（推荐）**
 
@@ -423,24 +418,30 @@ sequenceDiagram
 4. 任一步失败时将台账标记为 `ERROR`，并投入 **删除补偿延迟队列**（配置与上传对账相同，见 `j2agent.storage.delete.reconcile`）；Worker 在 `DELETING`/`ERROR` 状态下重试删 OSS 与 DB，最多 20 次指数退避；耗尽后保留 `ERROR` 供人工处理。应用重启时会补投所有 `DELETING` 记录的对账任务。
 5. 批量删除会返回失败的对象键，其余对象继续处理。
 
+MinIO 使用以 `/` 结尾的零字节对象模拟目录。删除文件后，系统会向上检查并清理已经没有其他对象的目录标记，避免文件列表中残留空目录；目录中仍有文件或子目录时不会清理。
+
 `delete`、`complete`、`abort` 与上传/删除对账 Worker 共用 per-objectKey 分布式锁。
 
 ### 预览与下载
 
 后端生成有效期 15 分钟的签名 URL。图片、PDF、文本、音视频等由浏览器直接预览，其他类型由浏览器或对象存储响应决定是否下载。
 
-## 5. OSS 与数据库同步
+## 5. OSS 与数据库差异检查
 
-管理员在 `/files` 页面的“同步检查”区域手动创建扫描任务。任务状态为：
+管理员在 `/files` 页面的“差异检查”区域启动后台异步任务。检查可由管理员主动终止，任务状态为：
 
 - `PENDING`
 - `RUNNING`
+- `CANCEL_REQUESTED`
+- `CANCELLED`
 - `SUCCESS`
 - `FAILED`
 
-同一个 Bucket 同时只允许一个 `PENDING` 或 `RUNNING` 任务，重复提交返回 `409 Conflict`。扫描使用分页列举，默认每页读取 500 个对象，并持续更新任务进度。
+同一个 Bucket 同时只允许一个活动任务，重复提交返回 `409 Conflict`。检查使用分页列举，默认每页读取 500 个对象，并持续更新任务进度。终止请求会在分页边界和对象处理循环中生效；本次临时结果会被丢弃，上一次成功结果不受影响。
 
-同步任务和差异明细默认保留 7 天。系统每天凌晨 2:30 清理超过保留期的 `SUCCESS`、`FAILED` 任务，先删除差异明细再删除任务；`PENDING`、`RUNNING` 任务不会被清理。可通过 `j2agent.storage.sync.retention-days` 和 `j2agent.storage.sync.cleanup-cron` 调整。
+数据库只保存异常明细：`OSS_ONLY`、`DB_ONLY`、`METADATA_MISMATCH` 和 `IN_PROGRESS`。`IN_SYNC` 只累计任务统计，不逐条写入差异表。新检查成功后按 Bucket 覆盖上一次异常快照；失败或终止不会覆盖。当前异常快照一直保留到下一次成功检查。
+
+非当前任务历史默认保留 7 天，系统每天凌晨 2:30 清理。当前成功快照及其任务不会因保留期到期被删除。可通过 `j2agent.storage.sync.retention-days` 和 `j2agent.storage.sync.cleanup-cron` 调整。
 
 ### 5.1 差异判定
 
@@ -454,7 +455,7 @@ sequenceDiagram
 
 `UPLOADING`/`DELETING` 中间态不再误报为 `METADATA_MISMATCH` 或 `DB_ONLY`。
 
-ETag 比较前会去除首尾引号。最后修改时间按秒归一化后比较，以兼容对象列表接口和元数据接口不同的时间精度。同步不会下载文件，也不会重新计算文件 SHA-256。
+ETag 比较前会去除首尾引号。最后修改时间按秒归一化后比较，以兼容对象列表接口和元数据接口不同的时间精度。检查不会下载文件，也不会重新计算文件 SHA-256。
 
 ### 5.2 人工处置
 
@@ -495,7 +496,9 @@ ETag 比较前会去除首尾引号。最后修改时间按秒归一化后比较
 | `POST` | `/files/delete-batch` | 批量删除文件 |
 | `GET` | `/files/preview?object-key=...` | 获取短期签名 URL |
 | `POST` | `/files/sync/tasks` | 创建异步扫描任务 |
+| `GET` | `/files/sync/tasks/latest` | 查询最近一次成功差异检查 |
 | `GET` | `/files/sync/tasks/{task-id}` | 查询任务进度 |
+| `POST` | `/files/sync/tasks/{task-id}/cancel` | 终止差异检查 |
 | `GET` | `/files/sync/tasks/{task-id}/diffs` | 分页查询差异 |
 | `POST` | `/files/sync/resolve` | 批量执行同一种处置动作 |
 
@@ -506,7 +509,7 @@ ETag 比较前会去除首尾引号。最后修改时间按秒归一化后比较
 - 路由：`/#/files`
 - 角色：`ROLE_ADMIN`
 - 入口：首页文件管理卡片、系统菜单文件管理项。
-- 页面区域：文件列表、同步检查。
+- 页面区域：文件列表、差异检查。
 - 删除 OSS 或两侧数据前会弹出二次确认。
 
 前端项目未全局注册 Element Plus 组件。新增或拆分文件管理页面时，需要在 Vue 组件中显式导入模板所用的 `ElButton`、`ElTable`、`ElMenuItem`、`ElPagination` 等组件，否则页面可能无法正确渲染。
@@ -515,7 +518,7 @@ ETag 比较前会去除首尾引号。最后修改时间按秒归一化后比较
 
 部署验收建议按以下顺序执行：
 
-1. 确认数据库迁移完成，三张表存在。
+1. 确认文件管理所需的三张数据库表及字段存在。
 2. 确认 Bucket 已创建，应用凭证具备所需权限。
 3. 启用 `j2agent.storage.enabled` 并重启后端。
 4. 使用管理员账号打开 `/#/files`。
