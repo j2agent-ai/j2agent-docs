@@ -8,6 +8,7 @@
 - 首版只管理 `j2agent.storage.bucket` 配置的默认 Bucket，不支持页面切换 Bucket。
 - 支持虚拟目录、面包屑导航、名称搜索、状态筛选和分页。
 - 支持上传、短期签名 URL 预览/下载、单个删除和批量删除。
+- 支持浏览器直传对象存储（带上传进度），以及经后端中转上传（兼容保留）。
 - 支持 MinIO、阿里云 OSS、七牛云 Kodo 和 Cloudflare R2。
 - 同步扫描和差异处置均由管理员手动触发，不包含定时任务和云事件通知。
 - 数据库仅保存对象元数据，不保存文件正文。
@@ -141,7 +142,10 @@ R2_SECRET_ACCESS_KEY=
 
 ```text
 V0_2__object_storage_file_management.sql
+V0_3__object_storage_sync_in_progress_count.sql
 ```
+
+`V0_3` 为同步任务表增加 `in_progress_count` 字段，用于统计 `IN_PROGRESS` 差异数量。
 
 新增三张表：
 
@@ -166,18 +170,250 @@ V0_2__object_storage_file_management.sql
 
 ### 上传
 
+前端默认使用**直传**流程，文件不经后端中转，适合大文件上传并显示真实进度。
+
+**直传（推荐）**
+
+1. 前端调用 `POST /files/upload/init`，传入虚拟目录前缀、文件名、Content-Type 和大小。
+2. 后端校验重名、写入 `UPLOADING` 台账，并签发上传凭证（MinIO/R2/阿里云 OSS 为预签名 PUT URL，七牛为 uploadToken）。
+3. 浏览器直接将文件 PUT/POST 到对象存储，XHR 监听 `upload.onprogress` 显示进度。
+4. 上传成功后调用 `POST /files/upload/complete`，后端读取对象元数据并更新为 `READY`。该接口**幂等**：台账已是 `READY` 时重复调用直接返回成功。
+5. 上传失败时前端调用 `POST /files/upload/abort` 清理半成品对象和台账；若 OSS 已传完但 complete 失败，**不会**自动 abort，台账保持 `UPLOADING`，可重试 complete 或通过同步扫描处置。
+
+**经后端中转（兼容保留）**
+
 1. 根据当前虚拟目录和原始文件名生成对象键。
 2. 同时检查数据库台账和对象存储；任一侧已存在同名对象即返回 `409 Conflict`，不会覆盖。
 3. 数据库先写入 `UPLOADING` 状态。
 4. 上传完成后读取对象存储元数据，并更新为 `READY`。
 5. 上传失败时保留台账并标记 `ERROR`，记录错误原因。
 
+**直传部署前置：Bucket CORS**
+
+浏览器直传需要在对象存储 Bucket 配置 CORS，允许前端 Origin 发起 `PUT`（七牛为 `POST`）和 `GET`：
+
+```xml
+<CORSRule>
+  <AllowedOrigin>https://your-j2agent-domain</AllowedOrigin>
+  <AllowedMethod>PUT</AllowedMethod>
+  <AllowedMethod>POST</AllowedMethod>
+  <AllowedMethod>GET</AllowedMethod>
+  <AllowedHeader>*</AllowedHeader>
+</CORSRule>
+```
+
+MinIO 可在控制台或 `mc admin config set` 配置；阿里云 OSS 在 Bucket 跨域设置中配置。
+
+#### 后台延迟对账
+
+`init` 成功后，后端自动将台账投入 **Redisson 延迟队列**，在后台反复对账，最多 **20 次**指数退避重试（10s → 20s → 40s … 上限 300s）。仅当台账仍为 `UPLOADING` 时才继续对账；OSS 对象已就绪则自动更新为 `READY`；用户 `abort` 则同步删除并写入 Redis 取消标记，队列任务见到后停止；20 次仍无法完成则强制清理 OSS 与台账。
+
+配置项（[`application.yaml`](j2agent/j2agent-starter/src/main/resources/application.yaml)）：
+
+```yaml
+j2agent:
+  storage:
+    upload:
+      reconcile:
+        enabled: true
+        max-attempts: 20
+        initial-delay-seconds: 10
+        max-delay-seconds: 300
+    delete:
+      reconcile:
+        enabled: true
+        max-attempts: 20
+        initial-delay-seconds: 10
+        max-delay-seconds: 300
+```
+
+应用重启时会扫描 DB 中所有 `UPLOADING` 记录并补投对账任务。
+
+`complete`、`abort`、`delete` 与上传对账 Worker 共用同一 **objectKey 分布式锁**（`ObjectFileLockService`），避免 abort 与对账竞态；`complete` 与 Worker 并发时幂等收敛为 `READY`。
+
+**图 1：Worker 总决策流程**
+
+```mermaid
+flowchart TD
+    start([取出对账任务]) --> lock[按 objectKey 加分布式锁]
+    lock --> cancelled{取消集合含此 key?}
+    cancelled -->|是| clearCancel[清除取消标记] --> stop1([结束])
+    cancelled -->|否| loadDb[读取 DB 台账]
+    loadDb --> existsDb{台账存在?}
+    existsDb -->|否| stop2([结束: 已删除])
+    existsDb -->|是| statusCheck{状态 = UPLOADING?}
+    statusCheck -->|否| stop3([结束: 已完成/已失败])
+    statusCheck -->|是| ossCheck{OSS 对象存在?}
+    ossCheck -->|是| reconcile[内部对账 upsert READY]
+    reconcile --> reconcileOk{对账成功?}
+    reconcileOk -->|是| stop4([结束: READY])
+    reconcileOk -->|否| attemptCheck
+    ossCheck -->|否| attemptCheck{attempt >= 20?}
+    attemptCheck -->|是| cleanup[forceCleanup 删 OSS + DB] --> stop5([结束: 超时清理])
+    attemptCheck -->|否| requeue["重新入队 attempt+1\n指数退避延迟"] --> stop6([等待下次对账])
+```
+
+**图 2：正常直传（前端 complete 成功）**
+
+```mermaid
+sequenceDiagram
+    participant UI as 浏览器
+    participant API as J2Agent
+    participant Queue as 延迟队列
+    participant OSS as 对象存储
+    participant DB as 数据库
+
+    UI->>API: init → UPLOADING
+    API->>Queue: schedule attempt=1
+    UI->>OSS: PUT 文件
+    OSS-->>UI: 200
+    UI->>API: complete
+    API->>OSS: getObjectMetadata
+    API->>DB: upsert READY
+    Note over Queue,DB: 延迟到期后 Worker 取任务
+    Queue->>API: reconcile
+    API->>DB: 状态已是 READY
+    Note over Queue: 直接结束，不再重试
+```
+
+**图 3：OSS 已传完，complete 失败，后台对账成功**
+
+```mermaid
+sequenceDiagram
+    participant UI as 浏览器
+    participant API as J2Agent
+    participant Queue as 延迟队列
+    participant Worker as ReconcileWorker
+    participant OSS as 对象存储
+    participant DB as 数据库
+
+    UI->>API: init → UPLOADING
+    API->>Queue: schedule attempt=1 delay=10s
+    UI->>OSS: PUT 文件 ✓
+    UI-xAPI: complete ✗（超时/500）
+    Note over UI: 前端重试 3 次仍失败\n不调用 abort
+    Queue->>Worker: take task attempt=1
+    Worker->>DB: 状态 UPLOADING
+    Worker->>OSS: objectExists ✓
+    Worker->>API: reconcileDirectUpload
+    API->>DB: upsert READY
+    Note over Worker: 对账成功，不再入队
+```
+
+**图 4：用户取消上传（abort）**
+
+```mermaid
+sequenceDiagram
+    participant UI as 浏览器
+    participant API as J2Agent
+    participant Redis as 取消集合
+    participant Queue as 延迟队列
+    participant Worker as ReconcileWorker
+    participant OSS as 对象存储
+    participant DB as 数据库
+
+    UI->>API: init → UPLOADING
+    API->>Queue: schedule attempt=1
+    UI->>API: abort
+    API->>Redis: markCancelled objectKey
+    API->>OSS: removeObject（若存在）
+    API->>DB: deleteByKey
+    API-->>UI: 200
+    Queue->>Worker: take task（可能已在途）
+    Worker->>Redis: 含取消标记?
+    Redis-->>Worker: 是
+    Worker->>Redis: clearCancelled
+    Note over Worker: 结束，不再 reconcile/cleanup
+```
+
+**图 5：OSS 尚未就绪，指数退避重试**
+
+```mermaid
+flowchart LR
+    subgraph attempt [重试节奏示例]
+        a1["attempt=1\n延迟 10s"]
+        a2["attempt=2\n延迟 20s"]
+        a3["attempt=3\n延迟 40s"]
+        a4["...\n上限 300s"]
+        a20["attempt=20\n最后尝试"]
+    end
+    a1 --> a2 --> a3 --> a4 --> a20
+```
+
+```mermaid
+sequenceDiagram
+    participant Queue as 延迟队列
+    participant Worker as ReconcileWorker
+    participant DB as 数据库
+    participant OSS as 对象存储
+
+    Queue->>Worker: take attempt=3
+    Worker->>DB: UPLOADING
+    Worker->>OSS: objectExists ✗
+    Note over Worker: 不标 ERROR
+    Worker->>Queue: schedule attempt=4 delay=80s
+```
+
+**图 6：20 次对账均失败，强制清理**
+
+```mermaid
+sequenceDiagram
+    participant Queue as 延迟队列
+    participant Worker as ReconcileWorker
+    participant API as J2Agent
+    participant OSS as 对象存储
+    participant DB as 数据库
+
+    Queue->>Worker: take attempt=20
+    Worker->>DB: UPLOADING
+    Worker->>OSS: objectExists ✗
+    Worker->>API: forceCleanupUpload
+    API->>OSS: removeObject（若存在）
+    API->>DB: deleteByKey
+    Note over Worker: 结束，不再入队
+```
+
+**图 7：应用重启恢复**
+
+```mermaid
+flowchart TD
+    boot([ApplicationReady]) --> scan[扫描 DB operation_status=UPLOADING]
+    scan --> empty{有待恢复记录?}
+    empty -->|否| done([结束])
+    empty -->|是| foreach[逐条 objectKey]
+    foreach --> schedule["schedule attempt=1\ninitialDelay"]
+    schedule --> foreach
+    foreach --> done
+```
+
+**图 8：complete 与 Worker 竞态**
+
+```mermaid
+sequenceDiagram
+    participant UI as 浏览器
+    participant API as J2Agent
+    participant Worker as ReconcileWorker
+    participant DB as 数据库
+
+    par 并发
+        UI->>API: complete
+    and
+        Worker->>API: reconcileDirectUpload
+    end
+    Note over API,DB: 同一 objectKey 分布式锁串行化
+    API->>DB: 首个成功 → READY
+    Note over API: 后者见 READY / 非 UPLOADING → 直接结束
+```
+
 ### 删除
 
 1. 数据库先标记为 `DELETING`。
 2. 删除对象存储中的对象。
 3. 删除数据库台账。
-4. 任一步失败时将台账标记为 `ERROR`，批量删除会返回失败的对象键，其余对象继续处理。
+4. 任一步失败时将台账标记为 `ERROR`，并投入 **删除补偿延迟队列**（配置与上传对账相同，见 `j2agent.storage.delete.reconcile`）；Worker 在 `DELETING`/`ERROR` 状态下重试删 OSS 与 DB，最多 20 次指数退避；耗尽后保留 `ERROR` 供人工处理。应用重启时会补投所有 `DELETING` 记录的对账任务。
+5. 批量删除会返回失败的对象键，其余对象继续处理。
+
+`delete`、`complete`、`abort` 与上传/删除对账 Worker 共用 per-objectKey 分布式锁。
 
 ### 预览与下载
 
@@ -202,8 +438,11 @@ V0_2__object_storage_file_management.sql
 |---|---|
 | `IN_SYNC` | 两侧存在，ETag、大小和对象修改时间一致 |
 | `OSS_ONLY` | 仅对象存储存在 |
-| `DB_ONLY` | 仅数据库台账存在 |
-| `METADATA_MISMATCH` | 对象键一致，但元数据不同 |
+| `DB_ONLY` | 仅数据库台账存在（台账状态为 `READY` 或 `ERROR`） |
+| `METADATA_MISMATCH` | 对象键一致，但元数据不同（台账非中间态） |
+| `IN_PROGRESS` | 台账处于 `UPLOADING` 或 `DELETING`，两侧可能尚未收敛，无需人工处置 |
+
+`UPLOADING`/`DELETING` 中间态不再误报为 `METADATA_MISMATCH` 或 `DB_ONLY`。
 
 ETag 比较前会去除首尾引号。最后修改时间按秒归一化后比较，以兼容对象列表接口和元数据接口不同的时间精度。同步不会下载文件，也不会重新计算文件 SHA-256。
 
@@ -221,6 +460,8 @@ ETag 比较前会去除首尾引号。最后修改时间按秒归一化后比较
 
 执行处置前，后端会重新读取 OSS 和数据库当前状态，并与扫描时快照比较。扫描后任一侧发生变化时，拒绝执行并将差异标记为 `STALE`，管理员需要重新扫描。
 
+处置动作为 **幂等** 设计：`DELETE_OSS`/`DELETE_DB`/`DELETE_BOTH` 在目标已不存在时视为成功，便于对 `FAILED` 差异安全重试。
+
 处置结果状态：
 
 - `PENDING`：等待人工处理。
@@ -235,7 +476,10 @@ ETag 比较前会去除首尾引号。最后修改时间按秒归一化后比较
 | 方法 | 路径 | 说明 |
 |---|---|---|
 | `GET` | `/files` | 分页查询文件和虚拟目录 |
-| `POST` | `/files` | 上传文件 |
+| `POST` | `/files` | 经后端中转上传文件 |
+| `POST` | `/files/upload/init` | 初始化直传，返回上传凭证 |
+| `POST` | `/files/upload/complete` | 完成直传，确认台账为 `READY` |
+| `POST` | `/files/upload/abort` | 取消直传，清理半成品 |
 | `DELETE` | `/files?object-key=...` | 删除单个文件 |
 | `POST` | `/files/delete-batch` | 批量删除文件 |
 | `GET` | `/files/preview?object-key=...` | 获取短期签名 URL |
@@ -276,6 +520,11 @@ ETag 比较前会去除首尾引号。最后修改时间按秒归一化后比较
 - 页面入口不可见或路由被拦截：确认当前用户角色为管理员。
 - 页面纯白且控制台提示 `Failed to resolve component`：检查页面是否显式导入了所用 Element Plus 组件。
 - 签名 URL 无法访问：检查 Endpoint、下载域名、HTTPS 配置和 Bucket 权限。
+- 直传失败且浏览器 Network 显示 CORS 错误：检查 Bucket 跨域设置是否允许前端 Origin 和 `PUT`/`POST` 方法。
+- OSS 已传完但 complete 失败：台账保持 `UPLOADING`，对象已在 OSS；前端会自动重试 complete，后台延迟队列最多 20 次自动对账；仍失败时可手动调用 `POST /files/upload/complete`，或在同步检查中对 `METADATA_MISMATCH` 执行 `UPDATE_DB`。
+- 台账长期 `UPLOADING`：后台最多 20 次自动对账；若 OSS 始终无对象则最终强制清理。
+- abort 后仍看到对账日志：正常，Worker 见到 Redis 取消标记后会停止。
+- complete 与对账重复执行：幂等设计，最终以 `READY` 为准。
 - 扫描一直失败：查看 `object_storage_sync_task.error_message` 和后端日志。
 - 差异处置变为 `STALE`：对象或台账在扫描后发生变化，重新扫描后再处理。
 
