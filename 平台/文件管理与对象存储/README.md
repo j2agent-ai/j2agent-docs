@@ -499,7 +499,8 @@ ETag 比较前会去除首尾引号。最后修改时间按秒归一化后比较
 | `POST` | `/files/upload/heartbeat` | PUT 进行中上报心跳，暂停对账 attempt 计数 |
 | `DELETE` | `/files?object-key=...` | 删除单个文件 |
 | `POST` | `/files/delete-batch` | 批量删除文件 |
-| `GET` | `/files/preview?object-key=...` | 获取短期签名 URL |
+| `GET` | `/files/preview?object-key=...` | 按 `chat-attachment-display` 返回展示 URL（proxy 为 content 代理，direct 为短期预签名） |
+| `GET` | `/files/content?object-key=...` | PROXY 模式预览地址；亦作 DIRECT 模式失败时的降级 |
 | `POST` | `/files/sync/tasks` | 创建异步扫描任务 |
 | `GET` | `/files/sync/tasks/latest` | 查询最近一次成功差异检查 |
 | `GET` | `/files/sync/tasks/{task-id}` | 查询任务进度 |
