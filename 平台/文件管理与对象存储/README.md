@@ -138,11 +138,12 @@ R2_SECRET_ACCESS_KEY=
 
 ## 3. 数据库表
 
-文件管理功能使用以下三张表：
+文件管理功能使用以下表（另见 [聊天图片附件](聊天图片附件/README.md) 对 `object_file_reference` 的说明）：
 
 | 表 | 作用 |
 |---|---|
 | `object_file` | 文件台账，记录供应商、Bucket、对象键、ETag、大小、类型、对象修改时间和操作状态，以 `bucket_name + object_key_hash` 唯一 |
+| `object_file_reference` | 业务引用台账，记录哪些 `object_file` 被聊天消息等场景引用，防止误删 |
 | `object_storage_sync_task` | 差异检查任务，记录任务状态、扫描进度、各差异类型数量、执行时间和失败原因 |
 | `object_storage_sync_diff` | 当前异常快照，记录 OSS 与数据库两侧元数据、差异类型、处置状态、处置动作和错误信息 |
 
@@ -415,11 +416,12 @@ sequenceDiagram
 
 ### 删除
 
-1. 数据库先标记为 `DELETING`。
-2. 删除对象存储中的对象。
-3. 删除数据库台账。
-4. 任一步失败时将台账标记为 `ERROR`，并投入 **删除补偿延迟队列**（配置与上传对账相同，见 `j2agent.storage.delete.reconcile`）；Worker 在 `DELETING`/`ERROR` 状态下重试删 OSS 与 DB，最多 20 次指数退避；耗尽后保留 `ERROR` 供人工处理。应用重启时会补投所有 `DELETING` 记录的对账任务。
-5. 批量删除会返回失败的对象键，其余对象继续处理。
+1. 若存在 `object_file_reference` 引用（如聊天图片），直接返回 `409 Conflict`，不进入删除流程。
+2. 数据库先标记为 `DELETING`。
+3. 删除对象存储中的对象。
+4. 删除数据库台账。
+5. 任一步失败时将台账标记为 `ERROR`，并投入 **删除补偿延迟队列**（配置与上传对账相同，见 `j2agent.storage.delete.reconcile`）；Worker 在 `DELETING`/`ERROR` 状态下重试删 OSS 与 DB，最多 20 次指数退避；耗尽后保留 `ERROR` 供人工处理。应用重启时会补投所有 `DELETING` 记录的对账任务。
+6. 批量删除会返回失败的对象键，其余对象继续处理。
 
 MinIO 使用以 `/` 结尾的零字节对象模拟目录。删除文件后，系统会向上检查并清理已经没有其他对象的目录标记，避免文件列表中残留空目录；目录中仍有文件或子目录时不会清理。
 
@@ -545,5 +547,7 @@ ETag 比较前会去除首尾引号。最后修改时间按秒归一化后比较
 - complete 与对账重复执行：幂等设计，最终以 `READY` 为准。
 - 扫描一直失败：查看 `object_storage_sync_task.error_message` 和后端日志。
 - 差异处置变为 `STALE`：对象或台账在扫描后发生变化，重新扫描后再处理。
+- 删除返回 `409 file is referenced by business data`：对象被聊天等场景引用，见 [聊天图片附件](聊天图片附件/README.md)。
+- 带图对话报 `InvalidParameter` / image format illegal：多为云端 LLM 无法访问内网预签名 URL；应使用从 OSS 读字节的实现，见 [聊天图片附件 §7.1](聊天图片附件/README.md#71-invalidparameter-the-image-format-is-illegal-and-cannot-be-opened)。
 
 自动化测试使用模拟对象存储，不依赖真实云凭证。MinIO、阿里云 OSS、七牛云 Kodo 和 Cloudflare R2 的真实凭证联调属于部署验收项。
