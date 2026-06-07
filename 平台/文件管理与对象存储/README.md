@@ -206,9 +206,9 @@ MinIO 可在控制台或 `mc admin config set` 配置；阿里云 OSS 在 Bucket
 
 #### 后台延迟对账
 
-`init` 成功后，后端自动将台账投入 **Redisson 延迟队列**，在后台反复对账，最多 **20 次**指数退避重试（10s → 20s → 40s … 上限 300s）。仅当台账仍为 `UPLOADING` 时才继续对账；OSS 对象已就绪则自动更新为 `READY`；用户 `abort` 则同步删除并写入 Redis 取消标记，队列任务见到后停止；20 次仍无法完成则强制清理 OSS 与台账。
+`init` 成功后，后端自动将台账投入 **Redisson 延迟队列**，在后台反复对账，默认 **10 次**、每次间隔 **30s**（总窗口约 **300s**，可配置，固定间隔而非指数退避）。仅当台账仍为 `UPLOADING` 时才继续对账；OSS 对象已就绪则自动更新为 `READY`；用户 `abort` 则同步删除并写入 Redis 取消标记，队列任务见到后停止；达到 `max-attempts` 仍无法完成则强制清理 OSS 与台账。
 
-浏览器 **PUT 进行中**时，前端每 10 秒调用 `POST /files/upload/heartbeat` 刷新 Redis TTL；对账 Worker 检测到活跃心跳时 **保持 attempt=1 重入队**，不递增、不触发 forceCleanup。关页或 PUT 结束后心跳停止，TTL 过期后恢复正常 20 次计数。
+浏览器 **PUT 进行中**时，前端每 10 秒调用 `POST /files/upload/heartbeat` 刷新 Redis TTL；对账 Worker 检测到活跃心跳时 **保持 attempt=1 重入队**，不递增、不触发 forceCleanup。关页或 PUT 结束后心跳停止，TTL 过期后恢复正常 attempt 计数。
 
 配置项（[`application.yaml`](j2agent/j2agent-starter/src/main/resources/application.yaml)）：
 
@@ -218,9 +218,12 @@ j2agent:
     upload:
       reconcile:
         enabled: true
-        max-attempts: 20
-        initial-delay-seconds: 10
-        max-delay-seconds: 300
+        # 最多对账次数；× retry-delay-seconds ≈ abandoned 上传等待窗口（默认 10×30=300s）
+        max-attempts: 10
+        # 每次失败后固定重试间隔（秒），上传对账不使用指数退避
+        retry-delay-seconds: 30
+        # 总窗口上限（秒），建议保持 max-attempts × retry-delay-seconds
+        max-total-seconds: 300
         heartbeat-interval-seconds: 10
         heartbeat-ttl-seconds: 30
         in-progress-delay-seconds: 10
@@ -255,9 +258,9 @@ flowchart TD
     reconcileOk -->|否| attemptCheck
     ossCheck -->|否| heartbeatCheck{上传心跳有效?}
     heartbeatCheck -->|是| heartbeatRequeue["重入队 attempt=1\n固定延迟"] --> stop7([等待下次对账])
-    heartbeatCheck -->|否| attemptCheck{attempt >= 20?}
+    heartbeatCheck -->|否| attemptCheck{attempt >= maxAttempts?}
     attemptCheck -->|是| cleanup[forceCleanup 删 OSS + DB] --> stop5([结束: 超时清理])
-    attemptCheck -->|否| requeue["重新入队 attempt+1\n指数退避延迟"] --> stop6([等待下次对账])
+    attemptCheck -->|否| requeue["重新入队 attempt+1\n固定 retry-delay 延迟"] --> stop6([等待下次对账])
 ```
 
 **图 2：正常直传（前端 complete 成功）**
@@ -295,7 +298,7 @@ sequenceDiagram
     participant DB as 数据库
 
     UI->>API: init → UPLOADING
-    API->>Queue: schedule attempt=1 delay=10s
+    API->>Queue: schedule attempt=1 delay=30s
     UI->>OSS: PUT 文件 ✓
     UI-xAPI: complete ✗（超时/500）
     Note over UI: 前端重试 3 次仍失败\n不调用 abort
@@ -333,18 +336,18 @@ sequenceDiagram
     Note over Worker: 结束，不再 reconcile/cleanup
 ```
 
-**图 5：OSS 尚未就绪，指数退避重试**
+**图 5：OSS 尚未就绪，固定间隔重试**
 
 ```mermaid
 flowchart LR
-    subgraph attempt [重试节奏示例]
-        a1["attempt=1\n延迟 10s"]
-        a2["attempt=2\n延迟 20s"]
-        a3["attempt=3\n延迟 40s"]
-        a4["...\n上限 300s"]
-        a20["attempt=20\n最后尝试"]
+    subgraph attempt [重试节奏示例 默认]
+        a1["attempt=1\n延迟 30s"]
+        a2["attempt=2\n延迟 30s"]
+        a3["attempt=3\n延迟 30s"]
+        a4["..."]
+        a10["attempt=10\n最后尝试"]
     end
-    a1 --> a2 --> a3 --> a4 --> a20
+    a1 --> a2 --> a3 --> a4 --> a10
 ```
 
 ```mermaid
@@ -358,10 +361,10 @@ sequenceDiagram
     Worker->>DB: UPLOADING
     Worker->>OSS: objectExists ✗
     Note over Worker: 不标 ERROR
-    Worker->>Queue: schedule attempt=4 delay=80s
+    Worker->>Queue: schedule attempt=4 delay=30s
 ```
 
-**图 6：20 次对账均失败，强制清理**
+**图 6：对账均失败，强制清理**
 
 ```mermaid
 sequenceDiagram
@@ -371,7 +374,7 @@ sequenceDiagram
     participant OSS as 对象存储
     participant DB as 数据库
 
-    Queue->>Worker: take attempt=20
+    Queue->>Worker: take attempt=10
     Worker->>DB: UPLOADING
     Worker->>OSS: objectExists ✗
     Worker->>API: forceCleanupUpload
@@ -529,8 +532,8 @@ ETag 比较前会去除首尾引号。最后修改时间按秒归一化后比较
 - 页面纯白且控制台提示 `Failed to resolve component`：检查页面是否显式导入了所用 Element Plus 组件。
 - 签名 URL 无法访问：检查 Endpoint、下载域名、HTTPS 配置和 Bucket 权限。
 - 直传失败且浏览器 Network 显示 CORS 错误：检查 Bucket 跨域设置是否允许前端 Origin 和 `PUT`/`POST` 方法。
-- OSS 已传完但 complete 失败：台账保持 `UPLOADING`，对象已在 OSS；前端会自动重试 complete，后台延迟队列最多 20 次自动对账；仍失败时可手动调用 `POST /files/upload/complete`，或在同步检查中对 `METADATA_MISMATCH` 执行 `UPDATE_DB`。
-- 台账长期 `UPLOADING`：若 PUT 仍在进行，前端 heartbeat 会阻止对账递增；心跳 TTL 过期（关页/断网）后恢复 20 次计数，OSS 始终无对象则最终强制清理。
+- OSS 已传完但 complete 失败：台账保持 `UPLOADING`，对象已在 OSS；前端会自动重试 complete，后台延迟队列按配置自动对账（默认 10 次×30s）；仍失败时可手动调用 `POST /files/upload/complete`，或在同步检查中对 `METADATA_MISMATCH` 执行 `UPDATE_DB`。
+- 台账长期 `UPLOADING`：若 PUT 仍在进行，前端 heartbeat 会阻止对账递增；心跳 TTL 过期（关页/断网）后恢复 attempt 计数，OSS 始终无对象则在默认约 300s 后强制清理。
 - 慢传被误清理：确认 PUT 期间 Network 可见 `/upload/heartbeat` 定期 200；心跳仅防止 DB 台账被清理，预签名 URL 仍 15 分钟有效。
 - abort 后仍看到对账日志：正常，Worker 见到 Redis 取消标记后会停止。
 - complete 与对账重复执行：幂等设计，最终以 `READY` 为准。
