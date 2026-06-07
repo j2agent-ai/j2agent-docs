@@ -219,8 +219,11 @@ j2agent:
         retry-delay-seconds: 30
         # 总窗口上限（秒），建议保持 max-attempts × retry-delay-seconds
         max-total-seconds: 300
+        # 浏览器直传期间向后端发送上传心跳的间隔（秒）
         heartbeat-interval-seconds: 10
+        # 上传心跳在 Redis 中的有效期（秒），超过该时间未续期则认为上传已停止
         heartbeat-ttl-seconds: 30
+        # 检测到上传心跳仍有效时，延后再次检查该任务的时间（秒），且不增加重试次数
         in-progress-delay-seconds: 10
     delete:
       reconcile:
