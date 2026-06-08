@@ -139,7 +139,8 @@ sequenceDiagram
 
 - **WebSocket**：连接参数已有 `agent-id`，与 `conversationId` 第三段一致即可与 HTTP 历史对齐。
 - **HTTP**：`getHistoryContext` **必填** `agent-id`；`getHistoryContextList` 可选 `agent-id` 过滤；`deleteHistoryContext` 可选 `agent-id`（不传则删除当前用户在该 `context-id` 下 **全部** 智能体行）；`MessageFeedbackRequest` 携带 `agentId` 以定位 `chat_context_item` 行。
-- **删除保护**：`deleteHistoryContext` 在落库前经 `ActiveChatTurnRegistry` 查询 Redis，若目标会话正在 WebSocket 流式中则返回 **409 CONFLICT**（`CHAT_CONTEXT_IN_PROGRESS` / 「请先停止对话」）。前端不做 busy 预判，由后端统一拦截。
+- **按 ID 删除**：`DELETE /context?context-id=...` 在落库前经 `ActiveChatTurnRegistry` 查询 Redis，若目标会话正在 WebSocket 流式中则返回 **409 CONFLICT**（`CHAT_CONTEXT_IN_PROGRESS` / 「请先停止对话」）。前端对单条删除与批量勾选做 busy 预判，后端仍作兜底。
+- **全部清除**：`DELETE /context?clear-all=true`（可选 `agent-id` 过滤）由服务端查询当前用户全部历史记录，**跳过运行中会话**后删除其余，无需前端拼接 `context-id` 列表。
 
 OpenAPI：`j2agent/j2agent-model/src/main/resources/openapi-interface.yaml` / `openapi-model.yaml`。
 
@@ -209,7 +210,7 @@ sequenceDiagram
 
 ### 10.4 删除历史校验规则
 
-`ChatContextService#deleteHistoryContext` 在事务删除前检查：
+**按 `context-id` 删除**（`ChatContextService#deleteHistoryContext`）在事务删除前检查：
 
 | 请求 `agent-id` | 检查方式 |
 |-----------------|----------|
@@ -218,7 +219,12 @@ sequenceDiagram
 
 - **HTTP 响应**：`409 CONFLICT`，错误码 `CHAT_CONTEXT_IN_PROGRESS`。
 - **i18n**：`j2agent-i18n.properties` / `_en.properties`。
-- **前端**：直接调删除 API，由全局 HTTP 拦截器展示后端 `message`；**不**在侧栏做 busy 禁用预判。
+- **前端**：单条删除与批量勾选对运行中会话做 busy 预判（提示「请先停止对话」）；后端仍作兜底。
+
+**全部清除**（`ChatContextService#clearAllHistoryContext`，`DELETE /context?clear-all=true`）：
+
+- 服务端查询当前用户全部历史（可选 `agent-id` 过滤），对运行中会话 **跳过**，删除其余。
+- 不传 `context-id`，避免前端分页拼接全量 ID。
 
 ### 10.5 与记忆 Redis 的区别
 
