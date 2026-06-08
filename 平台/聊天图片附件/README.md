@@ -27,8 +27,8 @@
 
 | 值 | 说明 | 适用场景 |
 |---|---|---|
-| `proxy`（**默认**） | 聊天：`/chat/files/content?objectKey=...`；文件管理预览：`/files/content?object-key=...`；文件管理上传：`/files/upload/content?object-key=...`（PUT）；经应用服务器转发 | MinIO `endpoint` 为内网地址（如 `127.0.0.1`、`minio:9000`），或需避免预签名 host 问题 |
-| `direct` | 返回 OSS **预签名直链**（聊天 24h / 文件管理预览 15min / 上传 PUT 15min），浏览器直连 MinIO | `minio.endpoint` 本身已是浏览器可达地址 |
+| `proxy`（**默认**） | 聊天：`/chat/files/content?objectKey=...`；文件管理预览：`/files/content?object-key=...`；文件管理上传：`/files/upload/content?object-key=...`（PUT）；经应用服务器转发 | S3 `endpoint` 为内网地址（如 `127.0.0.1`、`minio:9000`），或需避免预签名 host 问题 |
+| `direct` | 返回 OSS **预签名直链**（聊天 24h / 文件管理预览 15min / 上传 PUT 15min），浏览器直连对象存储 | `s3.endpoint` 本身已是浏览器可达地址 |
 
 **direct 模式示例**（局域网 IP `192.168.3.4`，MinIO 映射端口 `19000`）：
 
@@ -36,7 +36,7 @@
 j2agent:
   storage:
     chat-attachment-display: direct
-    minio:
+    s3:
       endpoint: http://192.168.3.4:19000   # 预签名 URL 的 host 即此地址，须客户端可访问
 ```
 
@@ -44,12 +44,12 @@ Docker `.env`：
 
 ```bash
 J2AGENT_CHAT_ATTACHMENT_DISPLAY=direct
-J2AGENT_MINIO_ENDPOINT=http://192.168.3.4:19000
+J2AGENT_S3_ENDPOINT=http://192.168.3.4:19000
 ```
 
 **注意**：
 
-- 预签名 URL 的 host 由 `minio.endpoint` 决定；**不可**在前端把 URL 中的 host 改成别的地址（会破坏 SigV4 签名 → `SignatureDoesNotMatch`）。
+- 预签名 URL 的 host 由 `s3.endpoint` 决定；**不可**在前端把 URL 中的 host 改成别的地址（会破坏 SigV4 签名 → `SignatureDoesNotMatch`）。
 - Docker 内服务端常用 `http://minio:9000` 访问 MinIO，浏览器无法解析该 host，此类环境应使用 **proxy**（默认），不要指望 direct。
 - direct 模式下若 OSS 直链仍失败，前端会自动降级为 content 代理（聊天 `/chat/files/content`，文件管理 `/files/content`）。
 
@@ -207,7 +207,7 @@ sequenceDiagram
 ### 9.4 历史图片无法显示 / SignatureDoesNotMatch
 
 - **proxy 模式（默认）**：聊天走 `/chat/files/content?objectKey=...`，文件管理预览走 `/files/content?object-key=...`，只需应用服务器可达，不依赖 MinIO 预签名。
-- **direct 模式**：预签名 host 来自 `minio.endpoint`，该地址须对浏览器可达（勿使用 `127.0.0.1`、`minio:9000` 等仅服务端可访问的 endpoint）；**禁止**在前端改写预签名 URL 的 host（会导致 `SignatureDoesNotMatch`）。
+- **direct 模式**：预签名 host 来自 `s3.endpoint`，该地址须对浏览器可达（勿使用 `127.0.0.1`、`minio:9000` 等仅服务端可访问的 endpoint）；**禁止**在前端改写预签名 URL 的 host（会导致 `SignatureDoesNotMatch`）。
 - DIRECT 模式 OSS 加载失败时，前端会自动降级为 content 代理。
 - 对象已被误删则无法恢复展示。
 
