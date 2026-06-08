@@ -494,6 +494,7 @@ ETag 比较前会去除首尾引号。最后修改时间按秒归一化后比较
 | `GET` | `/files` | 分页查询文件和虚拟目录 |
 | `POST` | `/files` | 经后端中转上传文件 |
 | `POST` | `/files/upload/init` | 初始化直传，返回上传凭证 |
+| `PUT` | `/files/upload/content?object-key=...` | PROXY 模式直传地址（浏览器 PUT 到应用服务器，再写入 OSS） |
 | `POST` | `/files/upload/complete` | 完成直传，确认台账为 `READY` |
 | `POST` | `/files/upload/abort` | 取消直传，清理半成品 |
 | `POST` | `/files/upload/heartbeat` | PUT 进行中上报心跳，暂停对账 attempt 计数 |
