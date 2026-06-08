@@ -24,11 +24,19 @@
    # 编辑 .env：J2AGENT_VOLUMES_PATH、密码、端口等
    ```
 
-2. 在仓库根目录打包后端（镜像构建需要 `j2agent-starter/target/*.tar.gz`）：
+2. 准备后端打包产物（二选一，详见 [构建与启动.md §1.1](./构建与启动.md#11-镜像构建时如何找到-targz)）：
+
+   - **开发机**：在仓库根目录 `mvn package`，Dockerfile 自动使用 `j2agent-starter/target/*.tar.gz`
+   - **离线 / 预置包（推荐）**：将 `j2agent-*.tar.gz` 放到 **`docker/j2agent/`**（与 Dockerfile 同级），构建时优先使用该文件
 
    ```bash
+   # 打包（有 Maven 的环境）
    mvn -f j2agent/pom.xml -pl j2agent-model -am -DskipTests install
    mvn -f j2agent/pom.xml -pl j2agent-starter -am -DskipTests package
+
+   # 可选：复制到 Dockerfile 同级，便于拷贝到离线机
+   cp j2agent/j2agent-starter/target/j2agent-*.tar.gz \
+      j2agent/docker/j2agent/
    ```
 
 3. 准备宿主机数据目录（首次部署）：

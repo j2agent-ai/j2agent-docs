@@ -7,7 +7,7 @@
 - 对话输入框支持上传图片，单条消息最多 **4** 张；选图后前端统一 **转为 JPEG**、按最长边 **2048px** 缩放并压缩（目标约 3MB），处理完成前不可发送。
 - 服务端仍校验 JPEG/PNG/WebP、单张不超过 **10 MB**。
 - 图片在**发送消息时**由服务端写入对象存储（前端仅本地预览，WebSocket 携带 Base64 `data` 字段）；对象键规则为 `chat/{userId}/{contextId}/{UUIDv7}_{文件名}`。
-- 仅当前用户可引用自己的对象键；发送消息时新路径还须属于当前 `contextId`。
+- 仅当前用户可引用自己的对象键；发送消息时 `objectKey` 还须属于当前 `contextId`。
 - 用户消息通过 WebSocket 携带 `attachments`（`ChatAttachmentDto` 列表）；纯图片消息允许文本为空。
 - 历史消息在 `chat_context_item.meta_json` 中持久化附件元数据（仅 `objectKey` 等，不存 URL）；展示 URL 由 `j2agent.storage.chat-attachment-display` 配置（见 §2.1）。
 - 向 LLM 投递时，后端从对象存储 **读取字节** 构造 Spring AI `Media`（仅此一步经服务器，无法省略）。
@@ -17,10 +17,7 @@
 
 ## 2. 对象键规则
 
-| 类型 | 路径示例 | 说明 |
-|---|---|---|
-| 新路径 | `chat/{userId}/{contextId}/{UUIDv7}_{文件名}` | 发送消息时由服务端上传；同会话同名文件可重复上传（UUID 前缀不同） |
-| 旧路径（兼容） | `chat/{userId}/{uploadUuid}/{文件名}` | 历史数据不迁移；预览/历史展示仍可用；发送引用时仍允许旧键 |
+| 路径 | `chat/{userId}/{contextId}/{UUIDv7}_{文件名}` | 发送消息时由服务端上传；同会话同名文件可重复上传（UUID 前缀不同） |
 
 工具类：`ChatFileKeys`（前缀生成、`requireOwnedKey` / `requireOwnedKeyForReference`）。
 
@@ -30,8 +27,8 @@
 
 | 值 | 说明 | 适用场景 |
 |---|---|---|
-| `proxy`（**默认**） | 聊天：`/chat/files/content?objectKey=...`；文件管理预览：`/files/content?object-key=...`；经应用服务器转发 | MinIO `endpoint` 为内网地址（如 `127.0.0.1`、`minio:9000`），或需避免预签名 host 问题 |
-| `direct` | 返回 OSS **预签名直链**（聊天 24h / 文件管理 15min），浏览器直连 MinIO，省服务器带宽 | `minio.endpoint` 本身已是浏览器可达地址 |
+| `proxy`（**默认**） | 聊天：`/chat/files/content?objectKey=...`；文件管理预览：`/files/content?object-key=...`；文件管理上传：`/files/upload/content?object-key=...`（PUT）；经应用服务器转发 | S3 `endpoint` 为内网地址（如 `127.0.0.1`、`minio:9000`），或需避免预签名 host 问题 |
+| `direct` | 返回 OSS **预签名直链**（聊天 24h / 文件管理预览 15min / 上传 PUT 15min），浏览器直连对象存储 | `s3.endpoint` 本身已是浏览器可达地址 |
 
 **direct 模式示例**（局域网 IP `192.168.3.4`，MinIO 映射端口 `19000`）：
 
@@ -39,7 +36,7 @@
 j2agent:
   storage:
     chat-attachment-display: direct
-    minio:
+    s3:
       endpoint: http://192.168.3.4:19000   # 预签名 URL 的 host 即此地址，须客户端可访问
 ```
 
@@ -47,12 +44,12 @@ Docker `.env`：
 
 ```bash
 J2AGENT_CHAT_ATTACHMENT_DISPLAY=direct
-J2AGENT_MINIO_ENDPOINT=http://192.168.3.4:19000
+J2AGENT_S3_ENDPOINT=http://192.168.3.4:19000
 ```
 
 **注意**：
 
-- 预签名 URL 的 host 由 `minio.endpoint` 决定；**不可**在前端把 URL 中的 host 改成别的地址（会破坏 SigV4 签名 → `SignatureDoesNotMatch`）。
+- 预签名 URL 的 host 由 `s3.endpoint` 决定；**不可**在前端把 URL 中的 host 改成别的地址（会破坏 SigV4 签名 → `SignatureDoesNotMatch`）。
 - Docker 内服务端常用 `http://minio:9000` 访问 MinIO，浏览器无法解析该 host，此类环境应使用 **proxy**（默认），不要指望 direct。
 - direct 模式下若 OSS 直链仍失败，前端会自动降级为 content 代理（聊天 `/chat/files/content`，文件管理 `/files/content`）。
 
@@ -103,8 +100,8 @@ OpenAPI 定义见 `j2agent-model/src/main/resources/openapi-model.yaml`：
 - 空文件 → `400`
 - 超过 10 MB → `413`
 - 非 JPEG/PNG/WebP → `415`
-- `objectKey` 不属于当前用户 → `403`
-- 发送消息引用时，新路径 `objectKey` 不属于当前 `contextId` → `403`（旧路径除外）
+- `objectKey` 不属于当前用户或格式非法 → `403`
+- 发送消息引用时，`objectKey` 不属于当前 `contextId` → `403`
 
 ## 5. 处理流程
 
@@ -158,8 +155,6 @@ sequenceDiagram
 
 仅删除某一 agent 行（传 `agent-id`）时只做步骤 1，不做前缀清扫（同 context 下 OSS 目录共享，其他 agent 可能仍引用）。
 
-旧路径 `chat/{userId}/{uploadUuid}/` 不参与前缀清扫；无 reference 的旧上传仍可能残留（可接受，或后续离线任务处理）。
-
 ## 7. 与文件管理的关系
 
 聊天图片占用默认 Bucket（`j2agent.storage.bucket`），**不会**出现在 `/#/files` 虚拟目录树中（前缀 `chat/` 与管理员文件管理 UI 分离），但对象与 `object_file` 台账仍由同一套对象存储服务维护。
@@ -174,12 +169,11 @@ sequenceDiagram
 2. 新建会话选择 2 张图并发送 → OSS 中对象均在 `chat/{userId}/{同一contextId}/` 下（发送后才出现，非选择时）。
 3. 同会话两次发送 `a.png` → 两个不同对象键，均成功。
 4. 切换历史会话后发送图片 → 落入对应 `contextId` 目录。
-5. 旧会话已存图片（旧路径）历史气泡仍可展示。
-6. 将 A 会话上传的图片 objectKey 填到 B 会话发送 → 后端拒绝（403）。
-7. 删除单条历史对话 → 该 context 下 OSS 对象与 `object_file` 记录被清理。
-8. 选择图片但未发送即删除对话 → 前缀清扫不会误删（发送前无 OSS 对象）；发送后删除对话仍会清扫。
-9. 对话页上传 PNG/JPEG，发送「描述这张图片」类问题，视觉模型应正常回复。
-10. 刷新页面后历史气泡仍能展示图片（proxy 为 content URL，direct 为 OSS 预签名 URL）。
+5. 将 A 会话上传的图片 objectKey 填到 B 会话发送 → 后端拒绝（403）。
+6. 删除单条历史对话 → 该 context 下 OSS 对象与 `object_file` 记录被清理。
+7. 选择图片但未发送即删除对话 → 前缀清扫不会误删（发送前无 OSS 对象）；发送后删除对话仍会清扫。
+8. 对话页上传 PNG/JPEG，发送「描述这张图片」类问题，视觉模型应正常回复。
+9. 刷新页面后历史气泡仍能展示图片（proxy 为 content URL，direct 为 OSS 预签名 URL）。
 
 ## 9. 常见问题
 
@@ -213,7 +207,7 @@ sequenceDiagram
 ### 9.4 历史图片无法显示 / SignatureDoesNotMatch
 
 - **proxy 模式（默认）**：聊天走 `/chat/files/content?objectKey=...`，文件管理预览走 `/files/content?object-key=...`，只需应用服务器可达，不依赖 MinIO 预签名。
-- **direct 模式**：预签名 host 来自 `minio.endpoint`，该地址须对浏览器可达（勿使用 `127.0.0.1`、`minio:9000` 等仅服务端可访问的 endpoint）；**禁止**在前端改写预签名 URL 的 host（会导致 `SignatureDoesNotMatch`）。
+- **direct 模式**：预签名 host 来自 `s3.endpoint`，该地址须对浏览器可达（勿使用 `127.0.0.1`、`minio:9000` 等仅服务端可访问的 endpoint）；**禁止**在前端改写预签名 URL 的 host（会导致 `SignatureDoesNotMatch`）。
 - DIRECT 模式 OSS 加载失败时，前端会自动降级为 content 代理。
 - 对象已被误删则无法恢复展示。
 
@@ -228,4 +222,4 @@ sequenceDiagram
 
 ### 9.6 `image does not belong to current conversation`
 
-发送消息时引用了其他 `contextId` 目录下的新路径对象键。请在本会话内重新发送图片，或使用历史会话中已有的旧路径附件。
+发送消息时引用了其他 `contextId` 目录下的对象键。请在本会话内重新发送图片。
