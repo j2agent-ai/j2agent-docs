@@ -11,7 +11,7 @@
 | [文件管理与对象存储](平台/文件管理与对象存储/README.md) | MinIO、阿里云 OSS、七牛云 Kodo、Cloudflare R2 与数据库同步 |
 | [聊天图片附件](平台/聊天图片附件/README.md) | 对话页图片上传、引用保护与视觉 LLM 投递 |
 | [LLM 提供商配置](平台/LLM提供商配置/README.md) | `api_provider_config`、深度思考元数据 |
-| [Agent 对话记录](平台/agent对话记录/README.md) | 多轮记忆、`conversationId`、Redis/JDBC |
+| [Agent 对话记录](平台/agent对话记录/README.md) | 多轮记忆、`conversationId`、Redis/JDBC、流式进行中状态 |
 | [Agent-UI 交互机制](平台/agent-ui交互机制/README.md) | 状态机、`AgentUiEventEnvelope`、WebSocket 事件 |
 | [插件 Agent 接入与界面](平台/插件Agent接入与界面/README.md) | 插件 JAR → 注册 → REST/WebSocket 全链路 |
 
@@ -25,6 +25,7 @@
 
 | 文档 | 说明 |
 |------|------|
+| [全局活跃任务浮窗](前端/全局活跃任务浮窗/README.md) | ChatActivityPanel 浮窗、坐标/象限/拖动、活跃任务列表与跳转 |
 | [Markdown 解析器](前端/md解析器/README.md) | 聊天气泡 Markdown 渲染与图表懒加载 |
 
 ## agent开发 — Agent 插件开发
