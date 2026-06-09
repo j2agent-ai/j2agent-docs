@@ -1,6 +1,6 @@
 # Markdown 解析器（聊天气泡渲染）
 
-本文说明 **j2agent-ui** 如何将 Agent 回复中的 Markdown 转为聊天气泡 HTML，并异步渲染其中的图表块。
+本文说明前端如何将 Agent 回复中的 Markdown 转为聊天气泡 HTML，并异步渲染其中的图表块。
 
 > 后端知识库分片用的 `MarkdownQaParser` 属于 RAG 管线，与本文无关。
 
@@ -34,9 +34,9 @@
 
 | 主题 | 路径 |
 |------|------|
-| 解析与图表 | [`markdownRenderer.ts`](../../j2agent-ui/src/utils/markdownRenderer.ts) |
-| 样式 | [`markdown.scss`](../../j2agent-ui/src/styles/markdown.scss) |
-| 挂载点 | [`ChatView.vue`](../../j2agent-ui/src/pages/chat/components/ChatView.vue) |
+| 解析与图表 | `src/utils/markdownRenderer.ts` |
+| 样式 | `src/styles/markdown.scss` |
+| 挂载点 | `src/pages/chat/components/ChatView.vue` |
 
 ## 智能报表 Agent 约定
 

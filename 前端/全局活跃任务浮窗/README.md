@@ -5,7 +5,7 @@
 在任意业务页提供全局可拖动的浮动入口，让用户：
 
 - 看到当前进行中的智能体对话任务（含空闲时的入口引导）；
-- 展开列表面板，查看任务标题、智能体名称与最近执行步骤；
+- 展开列表面板，查看任务标题、智能体名称与当前执行状态；
 - 点击条目跳转到对应会话；
 - 在移动端拖动时不与底层页面滚动冲突。
 
@@ -54,18 +54,24 @@ flowchart TB
 
 ## 3. 模块与文件
 
+Chat 业务逻辑位于 `src/pages/chat/ts/`，按职责分子目录；浮窗组件与样式仍在 `components/` 与同级 scss。
+
 | 文件 | 职责 |
 |------|------|
-| `j2agent-ui/src/pages/chat/components/ChatActivityPanel.vue` | 浮窗 UI、定位、拖动、展开动画、列表面板 |
-| `j2agent-ui/src/pages/chat/chatActivityStore.ts` | 进行中任务条目集合（`agentId` + `contextId`） |
-| `j2agent-ui/src/pages/chat/openChatSession.ts` | 激活会话并按需路由跳转 |
-| `j2agent-ui/src/pages/chat/resolveActiveEntryDisplay.ts` | 列表项标题、智能体名、最近步骤解析 |
-| `j2agent-ui/src/pages/chat/agentNameRegistry.ts` | 智能体名称缓存与按需刷新 |
-| `j2agent-ui/src/pages/chat/chatStreamService.ts` | 流式开始时 `markActive`，结束时 `markInactive` |
-| `j2agent-ui/src/pages/chat/chatSessionRegistry.ts` | `peekSession` / `activateSession`；批量停止活跃流 |
-| `j2agent-ui/src/pages/chat/chatLeaveGuard.ts` | 有活跃任务时离开确认 |
-| `j2agent-ui/src/pages/chat/useWarnBeforeUnloadOnActiveTasks.ts` | 拦截 F5 / Ctrl+R 刷新 |
-| `j2agent-ui/lib/core/App.vue` | 全局挂载 `<ChatActivityPanel />` |
+| `src/pages/chat/components/ChatActivityPanel.vue` | 浮窗 UI、定位、拖动、展开动画、列表面板 |
+| `src/pages/chat/ts/activity/store.ts` | `chatActivityStore`：进行中任务条目（`agentId` + `contextId`） |
+| `src/pages/chat/ts/activity/display.ts` | `resolveActiveEntryDisplay`：列表项标题、智能体名、当前状态 |
+| `src/pages/chat/ts/session/open.ts` | `openChatSession`：激活会话并按需路由跳转 |
+| `src/pages/chat/ts/session/registry.ts` | `chatSessionRegistry`：`peekSession` / `activateSession`；批量停止活跃流 |
+| `src/pages/chat/ts/session/types.ts` | `buildSessionKey` 等会话类型 |
+| `src/pages/chat/ts/agent/name-registry.ts` | 智能体名称缓存与按需刷新 |
+| `src/pages/chat/ts/stream/service.ts` | `startTurn` / `stopTurn`；流式与 activity store 同步 |
+| `src/pages/chat/ts/stream/agent-ui.ts` | 状态 i18n、`formatStepLabelParts` 等步骤文案 |
+| `src/pages/chat/ts/guard/leave.ts` | `guardLeaveWithActiveTasks`、`stopAllActiveChatTurns` |
+| `src/pages/chat/ts/guard/before-unload.ts` | `useWarnBeforeUnloadOnActiveTasks`：拦截 F5 / Ctrl+R |
+| `src/pages/chat/ts/index.ts` | App 层 barrel 导出（守卫、智能体名等） |
+| `src/pages/chat/chatThinkGlow.scss` | 悬浮球/流式条目橙蓝光晕 mixin |
+| `lib/core/App.vue` | 全局挂载 `<ChatActivityPanel />` |
 
 ## 4. 数据层：`chatActivityStore`
 
@@ -93,9 +99,11 @@ type ChatActivityEntry = {
 
 ### 4.3 写入来源
 
-- **主流**：`chatStreamService.startTurn` → `markActive`；`onmessage` → `updateState`；`onTurnClose` / `stopTurn` / `onerror` → `markInactive`。
+实现文件：`src/pages/chat/ts/activity/store.ts`（store）、`src/pages/chat/ts/stream/service.ts`（流式生命周期）。
+
+- **主流**：`startTurn`（`ts/stream/service.ts`）→ `markActive`；`onmessage` → `updateState`；`onTurnClose` / `stopTurn` / `onerror` → `markInactive`。
 - **辅助**：`ChatView.sendMessage` 发送前可预标记 `THINKING`。
-- **清理**：`chatSessionRegistry.stopAllActiveTurns` 遍历活跃条目并停止流。
+- **清理**：`chatSessionRegistry.stopAllActiveTurns`（`ts/session/registry.ts`）遍历活跃条目并停止流。
 
 列表排序：`updatedAt` 降序（用户最近触达的会话靠前，不受 LLM 状态推送影响）。
 
@@ -179,7 +187,7 @@ minBallTop = topbar.bottom + TOPBAR_GAP（默认 8px）
 - 尺寸使用 `shellStyle` 内**明确像素值**（`getPanelDimensions()`），不用 CSS `min()`，保证收起时宽高可过渡。
 - `is-shell-animating` 期间暂停呼吸光晕动画，避免与形变冲突。
 - 面板文案在收起时 `transition: none` 立即隐藏，避免文字溢出。
-- 有活跃任务时壳层加 `is-active`，复用 `chatThinkGlow.scss` 橙蓝光晕。
+- 有活跃任务时壳层加 `is-active`，复用 `src/pages/chat/chatThinkGlow.scss` 橙蓝光晕。
 
 面板最大尺寸：
 
@@ -223,11 +231,13 @@ height = min(360, viewportHeight * 0.5)
 
 ## 11. 会话跳转：`openChatSession`
 
+实现：`src/pages/chat/ts/session/open.ts`。
+
 ```ts
 openChatSession(agentId, contextId, { currentRoutePath, currentRouteAgentId })
 ```
 
-1. `chatSessionRegistry.activateSession(agentId, contextId)` 激活内存会话；
+1. `chatSessionRegistry.activateSession(agentId, contextId)`（`ts/session/registry.ts`）激活内存会话；
 2. 若当前不在 `/chat/assistant` 或 `agent-id` 不同，则 `goTo('/chat/assistant?agent-id=...')`；
 3. 若已在同智能体聊天页，仅切换 active 会话，不路由跳转。
 
@@ -235,15 +245,21 @@ openChatSession(agentId, contextId, { currentRoutePath, currentRouteAgentId })
 
 ## 12. 列表展示：`resolveActiveEntryDisplay`
 
-对每个 `ChatActivityEntry`：
+实现：`src/pages/chat/ts/activity/display.ts`；步骤/状态文案：`src/pages/chat/ts/stream/agent-ui.ts`。
 
-1. `peekSession` 读取内存会话（不创建新会话）；
-2. 标题：最近一条 user 消息摘要，否则 `contextId` 短码；
-3. 智能体名：`agentNameRegistry`；
-4. 步骤：最近 assistant turn 的 `turnSteps`，最多展示 3 条；无步骤时回退 `agentState`；
-5. 步骤状态：`agentStateI18n.resolveTurnStepStatus`（running / completed / failed）。
+对每个 `ChatActivityEntry` 解析为 `ActiveEntryDisplay`：
 
-`entryDisplays` 计算属性会订阅各 session 的 `messageContext`、`displayTurnStates` 等，保证流式过程中列表实时更新。
+| 字段 | 来源 |
+|------|------|
+| `title` | 最近一条 user 消息摘要（`ts/history/title.ts`），否则 `contextId` 短码 |
+| `agentName` | `ts/agent/name-registry.ts` |
+| `stateText` | 当前步骤经 `formatStepLabelParts` 得到的状态文案；无步骤时用 `getStateI18nText` 回退 `agentState` |
+| `toolName` | 当前步骤为工具调用时的内联工具名（可选） |
+| `isTurnActive` | `session.dispatcher.isBusyByState` |
+
+面板每行展示：标题、智能体名、一行状态（运行中带脉冲圆点 + `stateText`，工具调用时附加 `` `toolName` ``）。
+
+`ChatActivityPanel` 的 `entryDisplays` 计算属性会订阅各 session 的 `messageContext`、`displayTurnStates`、`currentAgentState`、`isBusyByState` 等，保证流式过程中列表实时更新。
 
 ## 13. 可见性与权限
 
@@ -257,12 +273,14 @@ isVisible = !isAuthRoute && hasRoleAccess(ROLE_USER)
 
 ## 14. 离开守卫
 
-| 机制 | 说明 |
-|------|------|
-| `chatLeaveGuard.guardLeaveWithActiveTasks` | 有活跃任务时弹窗确认，确认后 `stopAllActiveTurns` |
-| `useWarnBeforeUnloadOnActiveTasks` | 拦截 F5 / Ctrl+R，走同一套确认逻辑 |
+| 机制 | 文件 | 说明 |
+|------|------|------|
+| `guardLeaveWithActiveTasks` | `src/pages/chat/ts/guard/leave.ts` | 有活跃任务时弹窗确认，确认后 `stopAllActiveChatTurns` |
+| `useWarnBeforeUnloadOnActiveTasks` | `src/pages/chat/ts/guard/before-unload.ts` | 拦截 F5 / Ctrl+R，走同一套确认逻辑 |
 
-文案键：`ai.activity.beforeunload*`（见 `zh-ai.js` / `en-ai.js`）。
+`lib/core/App.vue` 通过 `src/pages/chat/ts/index.ts` 引入 `useWarnBeforeUnloadOnActiveTasks`。
+
+文案键：`ai.activity.beforeunload*`（见 `src/locale/lang/chat/zh-ai.js`、`src/locale/lang/chat/en-ai.js`）。
 
 ## 15. 常量速查
 
@@ -309,4 +327,4 @@ isVisible = !isAuthRoute && hasRoleAccess(ROLE_USER)
 | `ai.activity.panel.empty.hint` | 去选择智能体，开始对话 |
 | `ai.activity.panel.empty.cta` | 选择智能体 |
 
-英文见 `src/locale/lang/chat/en-ai.js`。
+文案文件：`src/locale/lang/chat/zh-ai.js`、`src/locale/lang/chat/en-ai.js`。

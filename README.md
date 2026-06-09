@@ -1,6 +1,6 @@
-# J2Agent 文档中心
+# AI Center 文档中心
 
-本目录集中存放 **j2agent-ai** 工作区内 J2Agent 相关项目文档，按主题归类为四大板块。
+本目录集中存放 **inc-ai** 工作区内 AI Center 相关项目文档，按主题归类为四大板块。
 
 ## 平台 — 平台能力
 
@@ -8,12 +8,12 @@
 |------|------|
 | [RAG 机制](平台/RAG机制/README.md) | 知识库同步、融合检索、静态文件展示 |
 | [安全与用户](平台/安全与用户/README.md) | 用户权限、邮箱注册 |
-| [文件管理与对象存储](平台/文件管理与对象存储/README.md) | MinIO、阿里云 OSS、七牛云 Kodo、Cloudflare R2 与数据库同步 |
-| [聊天图片附件](平台/聊天图片附件/README.md) | 对话页图片上传、引用保护与视觉 LLM 投递 |
 | [LLM 提供商配置](平台/LLM提供商配置/README.md) | `api_provider_config`、深度思考元数据 |
 | [Agent 对话记录](平台/agent对话记录/README.md) | 多轮记忆、`conversationId`、Redis/JDBC、流式进行中状态 |
 | [Agent-UI 交互机制](平台/agent-ui交互机制/README.md) | 状态机、`AgentUiEventEnvelope`、WebSocket 事件 |
 | [插件 Agent 接入与界面](平台/插件Agent接入与界面/README.md) | 插件 JAR → 注册 → REST/WebSocket 全链路 |
+| [文件管理与对象存储](平台/文件管理与对象存储/README.md) | 虚拟目录、直传、差异检查、MinIO/OSS/七牛/R2 |
+| [聊天图片附件](平台/聊天图片附件/README.md) | 对话图片上传、展示模式、引用保护与 LLM 投递 |
 
 ## 基础设施 — 部署与运维
 
@@ -22,6 +22,8 @@
 | [Docker 部署](基础设施/docker部署/README.md) | Compose 全栈部署、构建启动、数据卷、离线镜像、前端热更新 |
 
 ## 前端
+
+前端代码路径均**相对于前端工程根目录**，写作 `src/...`、`lib/...`，不写具体项目/仓库名（如 `j2agent-web/`）。Chat 模块逻辑集中在 `src/pages/chat/ts/`。
 
 | 文档 | 说明 |
 |------|------|
