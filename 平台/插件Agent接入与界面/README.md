@@ -55,13 +55,14 @@ flowchart TB
 
 - **`getAgentId()`**：`chat_assistant`
 - **`getAgentName()` / `getAgentDescription()`**：供列表与卡片展示文案。
-- **`getSort()`**：基类默认 100；助手覆盖为 **1**（当前 `listRegisteredAgents` 按 **agentId 字符串**排序，**未使用** `getSort()`；若前端要按业务优先级排序，需在接口或前端单独约定）。
+- **`getSort()`**：基类默认 100；助手覆盖为 **1**；`listRegisteredAgents` 按 **sort 升序、再 agentId 字典序**排序。
+- **`getLogo()`**：基类默认 `🤖`；助手可覆盖为自定义 emoji；经 `AgentInfoDto.logo` 供列表与聊天页展示（全局 `chatLogoUrl` 仍优先）。
 - **`getThinkingOverride()`**（可选）：Agent 级默认深度思考策略；默认 `USE_PROVIDER_DEFAULT`。单轮可被 WebSocket 消息体 `ChatRequestDto.thinkingMode` 覆盖（优先级更高）。
 
 ## 4. HTTP：列出已注册智能体（界面卡片/下拉数据源）
 
 - **实现**：`ChatController#listAgents` 委托 `agentRouter.listRegisteredAgents()`。
-- **行为**：遍历已注册的 `AiAgent`，映射为 `AgentInfoDto`（`agentId`、`name`、`description`、`showHotQuestions`），按 **`agentId` 字典序**排序后封装为 `AgentInfoList`。
+- **行为**：遍历已注册的 `AiAgent`，映射为 `AgentInfoDto`（`agentId`、`name`、`description`、`showHotQuestions`、`sort`、`logo`），按 **`sort` 升序、再 `agentId` 字典序**排序后封装为 `AgentInfoList`。
 - **OpenAPI**：`GET /v1/rest/j2agent/agents`，`operationId: listAgents`（见 `j2agent-model` 中 `openapi-interface.yaml`）。
 
 前端典型用法：启动或进入聊天页时请求该接口，用返回的 **`agentId`** 作为后续 WebSocket 与历史接口的 **`agent-id`**。
@@ -109,4 +110,4 @@ flowchart TB
 
 ---
 
-**文档版本说明**：与当前代码结构一致；若后续将「列表排序」改为使用 `getSort()` 或增加图标等展示字段，需同步更新第 3、4 节与 OpenAPI 模型。
+**文档版本说明**：与当前代码结构一致；列表排序与 `logo` 展示字段已接入 `GET /agents` 与前端智能体列表/聊天页。

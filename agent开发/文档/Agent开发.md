@@ -19,7 +19,8 @@
 
 | 方法 | 默认 | 说明 |
 |------|------|------|
-| `getSort()` | `100` | 业务排序权重（当前列表 API 按 `agentId` 字典序，未消费此字段） |
+| `getSort()` | `100` | 业务排序权重；`GET /agents` 按升序排列，相同时按 `agentId` 字典序 |
+| `getLogo()` | `🤖` | 列表与聊天页 emoji logo；子类可 override |
 | `getThinkingOverride()` | `USE_PROVIDER_DEFAULT` | Agent 级深度思考默认策略；见 [可选能力.md](可选能力.md) |
 | `isQaTemplateEnabled()` | `false` | 是否启用热门问题模板 |
 | `buildTools()` | 空数组 | 挂载 `@Tool` 工具 Bean |
