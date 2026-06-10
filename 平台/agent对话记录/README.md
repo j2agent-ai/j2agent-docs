@@ -179,8 +179,10 @@ WebSocket 一轮对话从首条用户消息被接受、到 `COMPLETED` / `FAILED
 |-----|------|------|
 | `{spring.application.name}:active-chat-turn:{contextId}:{agentId}` | `RAtomicLong` | 引用计数；同一 `(contextId, agentId)` 并发 register/unregister 时安全递减 |
 | `{spring.application.name}:active-chat-turn-ctx:{contextId}` | `RSet<String>` | 该 `contextId` 下当前有流式对话的 `agentId` 集合，供「删整 context」快速判断 |
+| `{spring.application.name}:active-chat-turn-hb:{contextId}:{agentId}` | `RBucket` | 活动心跳；流式期间由 `ChatService` 节流续期，过期则不再视为进行中 |
 
-- **TTL**：24 小时兜底，防止异常路径未 `unregister` 导致 key 永驻。
+- **counter TTL**：默认 24 小时兜底（`j2agent.active-chat-turn.key-fallback-ttl-hours`），防止 `unregister` 完全遗漏。
+- **心跳看门狗**：默认心跳 TTL 30s、续期间隔 10s、清扫间隔 60s（见 `j2agent.active-chat-turn.*`）。心跳 value 为最近 touch 时间戳（毫秒）；`isActive` / `isAnyActive` 要求 **counter > 0 且心跳未过期**，过期时惰性 `forceCleanup`。进程被 kill 后无续期，约 30s 内可删除。`ActiveChatTurnWatchdog` 定时清扫孤儿 counter/set。
 - **Redis 客户端**：Redisson（`RedisConfig#redissonClient`），与 `RedissonCachingChatMemoryRepository` 共用连接。
 
 ### 10.3 生命周期
@@ -193,12 +195,12 @@ sequenceDiagram
   participant API as ChatContextService
   WS->>WS: route(agentId) → resolvedAgentId
   WS->>REG: register(contextId, resolvedAgentId)
-  REG->>REDIS: INCR counter; SADD ctx set
-  Note over WS,REDIS: 流式进行中…
+  REG->>REDIS: INCR counter; SADD ctx set; SET heartbeat
+  Note over WS,REDIS: 流式进行中（UI 事件节流 touch 心跳）…
   WS->>REG: unregister(contextId, resolvedAgentId)
-  REG->>REDIS: DECR counter; SREM ctx set
+  REG->>REDIS: DECR counter; SREM ctx set; DEL heartbeat
   API->>REG: isActive / isAnyActive
-  REG->>REDIS: GET counter / SMEMBERS set
+  REG->>REDIS: GET counter + heartbeat / SMEMBERS set
 ```
 
 **`unregister` 触发路径**（幂等，仅首次生效）：
@@ -238,8 +240,9 @@ sequenceDiagram
 ### 10.6 排查清单
 
 - **误拦删除**：确认删除请求带的 `agent-id` 与当前流式 Agent 一致；同 `contextId` 下另一 Agent 流式不应拦截单 Agent 删除。
-- **漏拦删除**：查 Redis 是否存在对应 counter；多实例下确认各节点共用同一 Redis。
-- **key 残留**：counter 带 24h TTL；若长期残留可查 `unregister` 是否在所有终态路径执行。
+- **漏拦删除**：查 Redis 是否存在对应 counter **且** heartbeat key 仍有效；多实例下确认各节点共用同一 Redis。
+- **中断后仍无法删除**：后端被 kill 时查 `active-chat-turn-hb:{contextId}:{agentId}` 时间戳是否超过 TTL（默认 30s）；前端历史列表以 WebSocket 连接状态为准（`isContextStreaming`），断连后会清理本地活动登记。若仍拦截，确认是否有另一实例仍在流式。
+- **key 残留**：counter 带 24h 兜底 TTL；心跳过期后不再拦截删除，`ActiveChatTurnWatchdog` 会清扫孤儿 counter/set。
 - **Redis 不可用**：register/unregister 失败仅打 warn、不阻断聊天；`isActive` 查询失败视为未进行中（允许删除），需结合监控告警。
 
 ## 11. 相关源码索引
@@ -252,9 +255,11 @@ sequenceDiagram
 | 聊天服务与会话键 | `j2agent-server/src/main/java/io/github/jerryt92/j2agent/service/llm/ChatService.java` |
 | 历史与 REST | `j2agent-server/src/main/java/io/github/jerryt92/j2agent/service/llm/ChatContextService.java` |
 | 流式进行中 Redis 登记 | `j2agent-server/src/main/java/io/github/jerryt92/j2agent/service/llm/ActiveChatTurnRegistry.java` |
-| Redis key 前缀 | `j2agent-server/src/main/java/io/github/jerryt92/j2agent/config/RedisKeyNamespaces.java` |
+| 流式心跳看门狗清扫 | `j2agent-server/src/main/java/io/github/jerryt92/j2agent/service/llm/ActiveChatTurnWatchdog.java` |
+| 看门狗配置 | `j2agent-server/src/main/java/io/github/jerryt92/j2agent/config/chat/ActiveChatTurnProperties.java` |
+| Redis key 前缀 | `j2agent-server/src/main/java/io/github/jerryt92/j2agent/config/redis/RedisKeyNamespaces.java` |
 | ReAct 记忆 Advisor | `j2agent-server/src/main/java/io/github/jerryt92/j2agent/service/llm/advisor/ReactCompatibleMessageChatMemoryAdvisor.java` |
-| 窗口记忆 Bean | `j2agent-server/src/main/java/io/github/jerryt92/j2agent/config/ChatMemoryConfig.java` |
+| 窗口记忆 Bean | `j2agent-server/src/main/java/io/github/jerryt92/j2agent/config/chat/ChatMemoryConfig.java` |
 | 运行时窗口记忆 | `j2agent-server/src/main/java/io/github/jerryt92/j2agent/service/llm/memory/AppendOnlyWindowChatMemory.java` |
 | 消息窗口裁剪 | `j2agent-server/src/main/java/io/github/jerryt92/j2agent/service/llm/memory/MessageWindowTrimmer.java` |
 | JDBC 复合键仓储 | `j2agent-server/src/main/java/io/github/jerryt92/j2agent/service/llm/memory/CompositeKeyChatMemoryRepository.java` |
