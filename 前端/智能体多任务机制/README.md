@@ -266,18 +266,24 @@ chat-activity-panel（根锚点，width/height: 0）
 
 拖动时 `Teleport` 全屏 `activity-drag-shield`（`z-index: 1000`）阻断底层滚动。
 
-### 9.2 坐标机制
+### 9.2 坐标机制（水平就近锚边 + 固定 top）
 
-**单一存储** `posLeft` + `posTop`（球左上角），`sessionStorage` 键 `chat-activity-fab-pos`；兼容旧 `{ bottom }` 格式。
+**锚边** `anchorSide`：以球心相对屏幕竖中线选定水平锚边（`left` / `right`）。垂直轴**永远**使用 `top`，不切换 `bottom`。运行时绝对坐标 `posLeft` + `posTop`（球左上角）仍是拖动计算的基准，与水平偏移 `anchorOffsetX`（球外缘到锚定左/右缘的距离）及 `anchorOffsetY`（即 `top`）通过恒等式互相换算。
+
+**存储**：`sessionStorage` 键 `chat-activity-fab-pos`，新格式 `{ side, x, y }`；兼容旧 `{ left, top }`、更早的 `{ left, bottom }`，以及曾写入的 `{ corner, x, y }`（取 `corner` 含 `r` 为 `right`，`y` 仍为 top），读入后 clamp 并重锚。
 
 **双层定位**：
 
 | 层 | 作用 |
 |----|------|
-| 根节点 `.chat-activity-panel` | 固定 `left`+`top`，唯一坐标来源 |
+| 根节点 `.chat-activity-panel` | 按锚边输出 `left` 或 `right` + **固定** `top`，锚点始终为球左上角点 |
 | 壳层 `.activity-shell` | 相对偏移 + 显式 `width/height`，控制展开方向 |
 
-**钳制**：`left ∈ [0, vw-FAB_SIZE]`，`top ∈ [minBallTop, vh-FAB_SIZE]`，`minBallTop = topbar.bottom + 8px`。
+**重锚时机**：拖动中固定用 `left/top` 渲染（避免频繁换属性对）；松手、收起动画结束（`isQuadrantLocked` 解锁）、挂载加载后按当前位置重锚水平边。水平表示法切换为恒等式（如 `right = vw - left - FAB_SIZE`），切换瞬间像素位置完全一致，且根节点无 transition，故无跳动。
+
+**resize 跟边**：CSS 水平锚边使球在浏览器布局阶段即原生跟随左/右缘移动；resize 回调再由 `side + x/y` 反推绝对坐标、钳制并回写偏移，同时 `viewportTick` 自增驱动依赖视口尺寸的 computed 重算。垂直仍跟顶栏 clamp，不跟底边。
+
+**钳制**：四边相等安全边距 `EDGE_MARGIN = 24px`；`left ∈ [EDGE_MARGIN, vw - FAB_SIZE - EDGE_MARGIN]`，`top ∈ [max(minBallTop, EDGE_MARGIN), vh - FAB_SIZE - EDGE_MARGIN]`，`minBallTop = topbar.bottom + 8px`。视口过窄/过矮时 `getBallBounds()` 保证 `min ≤ max`；加载非法坐标回退默认位置。
 
 ### 9.3 象限与弹出方向
 
@@ -319,17 +325,20 @@ chat-activity-panel（根锚点，width/height: 0）
 
 ### 9.7 UI 设计决策
 
-1. 坐标只存球左上角，面板贴边适配不写回存储。
-2. 壳层偏移负责弹出方向，与存储坐标解耦。
-3. 象限锁定到收起动画结束。
-4. 像素级 shell 尺寸保证收起动画可过渡。
+1. 水平就近锚边：球靠近左/右半屏即以该边为水平原点，存储与渲染均为边相对偏移，resize 时球跟随左/右缘；垂直永远 `top`，不锚底边。
+2. 水平表示法切换只在松手/收起动画结束等静止时机进行，且换算为恒等式，切换瞬间像素位置不变。
+3. 面板贴边适配不写回存储。
+4. 壳层偏移负责弹出方向，与锚定坐标解耦。
+5. 象限锁定到收起动画结束。
+6. 像素级 shell 尺寸保证收起动画可过渡。
 
 ### 9.8 浮窗常见问题
 
 | 现象 | 处理 |
 |------|------|
 | 拖过中线面板晃 | 检查 `layoutQuadrant` 锁定 |
-| 缩放后球位置跳 | 仅用 `posLeft/posTop` + 根锚点 |
+| 缩放后球不跟左右边 | 检查 `anchorSide` 与 `anchorOffsetX/y` 是否在松手/解锁时同步（`syncAnchorFromPosition`） |
+| 换锚边时闪跳 | 水平表示法切换须像素等价且只在静止时机进行；拖动中应固定 `left/top` 渲染 |
 | 收起无动画 | `shellStyle` 注入像素宽高 |
 | 跳转后会话不对 | 浮窗走 `activateSession` 指定 context |
 
