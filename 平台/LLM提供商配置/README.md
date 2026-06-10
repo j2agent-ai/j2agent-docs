@@ -6,8 +6,8 @@
 
 | 模块 | 路径 |
 |------|------|
-| 配置 CRUD / 热更新 | `service/providerconfig/ApiProviderConfigService.java`、`ActiveProviderHolder.java` |
-| ChatModel 装配 | `config/LlmBackedChatModelFactory.java`、`ReloadableRoutingChatModel.java` |
+| 配置 CRUD / 热更新 | `config/provider/ApiProviderConfigService.java`、`ActiveProviderHolder.java` |
+| ChatModel 装配 | `config/llm/LlmBackedChatModelFactory.java`、`ReloadableRoutingChatModel.java` |
 | **深度思考 metadata 适配** | `service/llm/reasoning/SpringAiReasoningMetadataAdapter.java`（见 §1.3） |
 | 管理端表单 | `src/pages/settings/components/ProviderConfigForm.vue`、`src/pages/settings/components/ModelConfigListPanel.vue` |
 | 对话记忆 Advisor | `service/llm/advisor/ReactCompatibleMessageChatMemoryAdvisor.java`（见 [Agent 对话记录机制](../agent对话记录/README.md)） |

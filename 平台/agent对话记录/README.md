@@ -252,9 +252,9 @@ sequenceDiagram
 | 聊天服务与会话键 | `j2agent-server/src/main/java/io/github/jerryt92/j2agent/service/llm/ChatService.java` |
 | 历史与 REST | `j2agent-server/src/main/java/io/github/jerryt92/j2agent/service/llm/ChatContextService.java` |
 | 流式进行中 Redis 登记 | `j2agent-server/src/main/java/io/github/jerryt92/j2agent/service/llm/ActiveChatTurnRegistry.java` |
-| Redis key 前缀 | `j2agent-server/src/main/java/io/github/jerryt92/j2agent/config/RedisKeyNamespaces.java` |
+| Redis key 前缀 | `j2agent-server/src/main/java/io/github/jerryt92/j2agent/config/redis/RedisKeyNamespaces.java` |
 | ReAct 记忆 Advisor | `j2agent-server/src/main/java/io/github/jerryt92/j2agent/service/llm/advisor/ReactCompatibleMessageChatMemoryAdvisor.java` |
-| 窗口记忆 Bean | `j2agent-server/src/main/java/io/github/jerryt92/j2agent/config/ChatMemoryConfig.java` |
+| 窗口记忆 Bean | `j2agent-server/src/main/java/io/github/jerryt92/j2agent/config/chat/ChatMemoryConfig.java` |
 | 运行时窗口记忆 | `j2agent-server/src/main/java/io/github/jerryt92/j2agent/service/llm/memory/AppendOnlyWindowChatMemory.java` |
 | 消息窗口裁剪 | `j2agent-server/src/main/java/io/github/jerryt92/j2agent/service/llm/memory/MessageWindowTrimmer.java` |
 | JDBC 复合键仓储 | `j2agent-server/src/main/java/io/github/jerryt92/j2agent/service/llm/memory/CompositeKeyChatMemoryRepository.java` |

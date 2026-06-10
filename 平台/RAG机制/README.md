@@ -22,13 +22,14 @@ flowchart TB
     end
     MilvusWrite --> store
     subgraph query [检索 - 查询]
-        UserQ[用户问题 / 命中测试 query]
+        UserQ["用户输入 text + media"]
+        QT[QueryTransformer 链]
         Chunker[QueryChunker 超长切分]
         EmbedQ[EmbeddingService]
         Hybrid[MilvusService.hybridRetrieval]
         Fuse[Retriever 多段融合]
         Agent[AbstractCollectionKbRetriever]
-        UserQ --> Chunker --> EmbedQ --> Hybrid --> Fuse --> Agent
+        UserQ --> QT --> Chunker --> EmbedQ --> Hybrid --> Fuse --> Agent
     end
     store --> Hybrid
     Agent --> LLM[Agent ChatClient + RAG Advisor]
@@ -42,6 +43,7 @@ flowchart TB
 | 文档 | 说明 |
 |------|------|
 | [检索模块 README](检索/README.md) | 查询侧入口与代码速查 |
+| [Query 预处理](检索/Query预处理.md) | Multimodal / Compression / Rewrite QueryTransformer 链 |
 | [融合检索](检索/融合检索.md) | 稠密 + 稀疏混合检索、超长 query 多向量融合、维护降级、查询维度校验 |
 
 ### 知识库维护
@@ -60,6 +62,8 @@ flowchart TB
 |------|------|
 | 维护协调器 | `j2agent/j2agent-server/.../repo/KnowledgeRepoMaintenanceCoordinator.java` |
 | 检索引擎 | `j2agent/j2agent-server/.../service/rag/retrieval/Retriever.java` |
+| Query 预处理 | `.../rag/query/DefaultQueryTransformers.java`、`MultimodalQueryTransformer.java` |
+| RAG skip Advisor | `.../service/llm/advisor/EmptyQuerySkippingRetrievalAugmentationAdvisor.java` |
 | Milvus 混合检索 | `.../service/rag/vdb/milvus/MilvusService.java` |
 | 知识库同步逻辑 | `.../service/rag/knowledge/repo/KnowledgeRepoSyncService.java` |
 | 向量写入 | `.../service/rag/knowledge/MilvusKnowledgeWriteService.java` |
@@ -77,5 +81,7 @@ j2agent:
     query-chunk-overlap-chars: 200
     max-query-chunks: 4
 ```
+
+Query 预处理链（Multimodal / Compression / Rewrite）**平台默认全开**，无独立配置项。详见 [Query预处理](检索/Query预处理.md)。
 
 Embedding 提供商连接见 [LLM 提供商配置](../LLM提供商配置/README.md)。对话记忆见 [Agent 对话记录机制](../agent对话记录/README.md)。
