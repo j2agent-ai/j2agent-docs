@@ -76,9 +76,9 @@ j2agent:
     repo:
       root-path: /opt/j2agent/volume/knowledge-repo
       watch-enabled: true
+      content-segment-overlap-chars: 50
   retrieve:
     max-embedding-input-chars: 7500
-    query-chunk-overlap-chars: 200
     max-query-chunks: 4
 ```
 
