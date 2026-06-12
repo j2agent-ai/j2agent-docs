@@ -27,7 +27,7 @@
 
 - **Mermaid**（` ```mermaid `）：flowchart、pie、xychart-beta、sequenceDiagram 等
 - **Vega-Lite**（` ```vega-lite ` / ` ```vegalite `）
-- **PlantUML**（` ```plantuml ` / ` ```puml `，依赖 `/vendor/plantuml-js/plantuml.js`）
+- **PlantUML**（` ```plantuml ` / ` ```puml `，npm 动态加载 `@plantuml/core`）
 - **HTML 预览**（` ```html `，sandbox iframe）
 
 ## 关键代码

@@ -23,6 +23,7 @@
 | `getLogo()` | `🤖` | 列表与聊天页 emoji logo；子类可 override |
 | `getThinkingOverride()` | `USE_PROVIDER_DEFAULT` | Agent 级深度思考默认策略；见 [可选能力.md](可选能力.md) |
 | `isQaTemplateEnabled()` | `false` | 是否启用热门问题模板 |
+| `isRagSourceDisplayEnabled()` | `false` | 是否向前端展示 RAG 来源（`rag_infos` 仍落库） |
 | `buildTools()` | 空数组 | 挂载 `@Tool` 工具 Bean |
 | `buildDocumentRetriever()` | `null` | RAG 检索器 |
 | `buildToolCallbacks()` | 由 `buildTools()` 转换本地 `@Tool` | 可 override；MCP 由 `buildAgent()` 内 private 逻辑追加，不受 override 影响 |
