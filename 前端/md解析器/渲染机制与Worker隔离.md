@@ -3,6 +3,7 @@
 本文描述 **LLM 流式输出从 Markdown 原文到聊天气泡可见内容** 的完整链路，包括主线程同步解析、流式分段策略、Web Worker 图表渲染与内存防护。适用于排查卡顿、OOM、图表不显示或流式抽搐等问题。
 
 > **性能优化机制专篇**（分层示意图、优化前后对比、参数速查）：见 [图表渲染性能优化.md](图表渲染性能优化.md)。  
+> **未闭合围栏与会话切换**（open-fence parse、段缓存 vs 图表 DOM、restoreSessionDiagrams）：见 [围栏与会话切换架构.md](围栏与会话切换架构.md)。  
 > 围栏语法、xychart 修正、样式细节见 [图表渲染.md](图表渲染.md)、[样式约定.md](样式约定.md)。
 
 ## 端到端总览
@@ -63,7 +64,9 @@ flowchart TB
 
 ## 阶段一：同步 Markdown 解析（主线程）
 
-入口：`renderMarkdown` / `renderMarkdownCached`（[`markdownRenderer.ts`](../../../j2agent-ui/src/utils/markdownRenderer.ts)）。
+入口：`renderMarkdown` / `renderMarkdownCached` → **`renderMarkdownWithOpenFenceSupport`**（[`markdownRenderer.ts`](../../../j2agent-ui/src/utils/markdownRenderer.ts)）。
+
+未闭合 async 围栏（`mermaid` / `plantuml` / `vega-lite` / `html`）时：**仅对 opening fence 之前的 prefix 跑 markdown-it**，围栏 body 手工拼 placeholder，并打 `data-md-fence-open="true"`。详见 [围栏与会话切换架构.md](围栏与会话切换架构.md#3-未闭合围栏围栏感知-markdown)。
 
 ```mermaid
 flowchart LR
@@ -88,13 +91,15 @@ flowchart LR
 围栏识别后输出占位结构（示意）：
 
 ```html
-<div class="md-diagram md-diagram-mermaid" data-md-render="mermaid" data-md-revision="27">
+<div class="md-diagram md-diagram-mermaid" data-md-render="mermaid" data-md-revision="28">
   <pre class="md-diagram-source" hidden>flowchart LR …</pre>
   <div class="md-diagram-body md-block-pending">
     <span class="md-block-generating">生成中…</span>
   </div>
 </div>
 ```
+
+未闭合围栏额外带 `data-md-fence-open="true"`（闭合后消失）。
 
 源码保存在 **hidden `<pre>`**，避免 `v-html` 二次转义；异步阶段从该节点读取原文送 Worker。
 
@@ -144,16 +149,21 @@ assistant-answer.message-md
 `scheduleUpdateStreamTailSegmentInPlace` 合并策略：
 
 - **rAF** + **最小间隔 80ms**（`STREAM_TAIL_MIN_INTERVAL_MS`），避免每个 token 跑完整 `markdown-it`。
-- 若尾段仍含 **未闭合** 的 mermaid/plantuml/vega/html 围栏：只同步 pending 块之前的 DOM + 更新 hidden source，**保留** pending 占位节点（不整段 `innerHTML` 替换）。
+- 若尾段含 **未闭合** async 围栏：**永不** `renderMarkdown(全文)`；前缀不变时仅 `syncBlockSourceText`，否则 `buildOpenFenceTailDom`（prefixHtml + placeholder）。
+- 围栏 **已闭合** 后才走 `renderMarkdown` + patch / `innerHTML`。
+
+详见 [围栏与会话切换架构.md](围栏与会话切换架构.md#4-流式尾段就地更新)。
 
 ### 何时触发图表渲染
 
 | 时机 | 行为 |
 |------|------|
-| 流式中围栏闭合（完成段 +1） | `activateMarkdownBlocks()` debounce 100ms |
+| 流式中围栏闭合（完成段 +1） | `flushActivateMarkdownBlocks()` |
 | 流式结束 `isBusyByState → false` | `flushActivateMarkdownBlocks()` 立即补渲染 |
-| 历史消息入列 / 非 busy | 全量或增量 `renderMarkdownBlocks` |
+| 历史消息入列 / 非 busy | `flushActivateMarkdownBlocks()` |
+| **侧边栏 / keep-alive 切会话** | `showSessionView` → **`restoreSessionDiagrams()`**（复用 HTML 缓存，仅 flush 图表） |
 | 聊天页 idle | `preloadDiagramRuntimes()` → Worker warmup |
+| 流式中其它增量 | `activateMarkdownBlocks()` debounce 100ms |
 
 流式期间调用：
 
@@ -165,7 +175,9 @@ renderMarkdownBlocks(scopeRoot, {
 })
 ```
 
-`deferDiagrams: true` 时，**仅跳过** 仍位于 `[data-md-stream-tail]` 容器内、围栏未闭合的图表块；**已闭合** 的块在流式过程中也会立即渲染。
+`deferDiagrams: true` 时，**仅跳过** 仍位于 `[data-md-stream-tail]` 容器内、围栏未闭合的图表块；**已闭合** 的块在流式过程中也会立即渲染。未闭合块还带 `data-md-fence-open`，且 `isBlockPendingRender` 对其返回 false，不进入调度空转。
+
+会话切换、段缓存、`restoreSessionDiagrams` 详见 [围栏与会话切换架构.md](围栏与会话切换架构.md)。
 
 ---
 
