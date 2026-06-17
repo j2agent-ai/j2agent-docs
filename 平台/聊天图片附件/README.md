@@ -9,7 +9,7 @@
 - 图片在**发送消息时**由服务端写入对象存储（前端仅本地预览，WebSocket 携带 Base64 `data` 字段）；对象键规则为 `chat/{userId}/{contextId}/{UUIDv7}_{文件名}`。
 - 仅当前用户可引用自己的对象键；发送消息时 `objectKey` 还须属于当前 `contextId`。
 - 用户消息通过 WebSocket 携带 `attachments`（`ChatAttachmentDto` 列表）；纯图片消息允许文本为空。
-- 历史消息在 `chat_context_item.meta_json` 中持久化附件元数据（仅 `objectKey` 等，不存 URL）；展示 URL 由 `j2agent.storage.chat-attachment-display` 配置（见 §2.1）。
+- 历史消息在 `chat_context_item.meta_json` 中持久化附件元数据（仅 `objectKey` 等，不存 URL）；展示 URL 由 `j2agent.storage.access-mode` 配置（见 §2.1）。
 - 向 LLM 投递时，后端从对象存储 **读取字节** 构造 Spring AI `Media`（仅此一步经服务器，无法省略）。
 - 被聊天引用的对象文件在文件管理页 **不可删除**（`409 Conflict: file is referenced by business data`）；删除会话记忆时会清理引用记录，并在整 context 删除时清扫 OSS 对象与 `object_file` 台账。
 
@@ -21,21 +21,23 @@
 
 工具类：`ChatFileKeys`（前缀生成、`requireOwnedKey` / `requireOwnedKeyForReference`）。
 
-### 2.1 聊天图片展示模式
+### 2.1 对象存储访问模式
 
-配置项 `j2agent.storage.chat-attachment-display`（环境变量 `J2AGENT_CHAT_ATTACHMENT_DISPLAY`）：
+配置项 `j2agent.storage.access-mode`（环境变量 `J2AGENT_STORAGE_ACCESS_MODE`，默认 `proxy`）：
 
 | 值 | 说明 | 适用场景 |
 |---|---|---|
 | `proxy`（**默认**） | 聊天：`/chat/files/content?objectKey=...`；文件管理预览：`/files/content?object-key=...`；文件管理上传：`/files/upload/content?object-key=...`（PUT）；经应用服务器转发 | S3 `endpoint` 为内网地址（如 `127.0.0.1`、`minio:9000`），或需避免预签名 host 问题 |
 | `direct` | 返回 OSS **预签名直链**（聊天 24h / 文件管理预览 15min / 上传 PUT 15min），浏览器直连对象存储 | `s3.endpoint` 本身已是浏览器可达地址 |
 
+该配置作用于聊天附件展示、文件管理预览/下载与浏览器直传上传凭证，不仅限于聊天场景。
+
 **direct 模式示例**（局域网 IP `192.168.3.4`，MinIO 映射端口 `19000`）：
 
 ```yaml
 j2agent:
   storage:
-    chat-attachment-display: direct
+    access-mode: direct
     s3:
       endpoint: http://192.168.3.4:19000   # 预签名 URL 的 host 即此地址，须客户端可访问
 ```
@@ -43,7 +45,7 @@ j2agent:
 Docker `.env`：
 
 ```bash
-J2AGENT_CHAT_ATTACHMENT_DISPLAY=direct
+J2AGENT_STORAGE_ACCESS_MODE=direct
 J2AGENT_S3_ENDPOINT=http://192.168.3.4:19000
 ```
 
@@ -65,7 +67,7 @@ OpenAPI 定义见 `j2agent-model/src/main/resources/openapi-model.yaml`：
 | `name` | 原始文件名（展示名，不含 UUID 前缀） |
 | `contentType` | MIME 类型 |
 | `size` | 字节大小 |
-| `url` | 展示用 URL（由 `chat-attachment-display` 决定：OSS 预签名直链或 content 代理）；不写入持久化 meta_json |
+| `url` | 展示用 URL（由 `access-mode` 决定：OSS 预签名直链或 content 代理）；不写入持久化 meta_json |
 | `data` | Base64 编码的图片字节，**仅 WebSocket 发送时使用**，服务端上传 OSS 后不持久化 |
 
 `MessageDto.attachments` 仅用户消息使用。
@@ -90,7 +92,7 @@ OpenAPI 定义见 `j2agent-model/src/main/resources/openapi-model.yaml`：
 | 方法 | 路径 | 说明 |
 |---|---|---|
 | `POST` | `/chat/files?context-id=` | （兼容）直接上传图片（multipart `file`），返回 `ChatAttachmentDto`；主流程已改为发送时服务端上传 |
-| `GET` | `/chat/files/preview?objectKey=` | 按 `chat-attachment-display` 返回展示 URL（与历史/NOTICE 一致） |
+| `GET` | `/chat/files/preview?objectKey=` | 按 `access-mode` 返回展示 URL（与历史/NOTICE 一致） |
 | `GET` | `/chat/files/content?objectKey=` | PROXY 模式展示地址；亦作 DIRECT 模式失败时的降级 |
 
 校验规则（`ChatFileController`）：
@@ -115,7 +117,7 @@ sequenceDiagram
     UI->>UI: 本地预览（blob URL，仅输入区）
     UI->>API: WebSocket ChatRequestDto + attachments.data（Base64）
     API->>OSS: putObject chat/userId/contextId/uuid_file
-    API-->>UI: NOTICE user-attachments-ready（展示 URL，见 chat-attachment-display）
+    API-->>UI: NOTICE user-attachments-ready（展示 URL，见 access-mode）
     API->>API: validateAndReference + object_file_reference
     API->>OSS: getObject 读字节（仅 LLM 推理）
     API->>LLM: UserMessage.media（base64/Resource）
@@ -129,7 +131,7 @@ sequenceDiagram
 
 前端直接使用后端下发的 `attachment.url`；DIRECT 模式加载失败时降级 `/chat/files/content`。
 
-后端：`ChatAttachmentUrlResolver` 按 `chat-attachment-display` 生成展示 URL；`GET /context` 与 WS NOTICE 均经此解析。
+后端：`ChatAttachmentUrlResolver` 按 `access-mode` 生成展示 URL；`GET /context` 与 WS NOTICE 均经此解析。
 
 后端核心类：
 
@@ -144,7 +146,7 @@ sequenceDiagram
 
 ### 历史消息展示
 
-`GET /context` 返回前由 `ChatAttachmentUrlResolver` 按 `chat-attachment-display` 为附件填充展示 URL（proxy 为 content 代理，direct 为 OSS 预签名）。持久化仅存 `objectKey`；发送成功后 WS `user-attachments-ready` 下发同一套 URL，实时气泡与历史展示一致。
+`GET /context` 返回前由 `ChatAttachmentUrlResolver` 按 `access-mode` 为附件填充展示 URL（proxy 为 content 代理，direct 为 OSS 预签名）。持久化仅存 `objectKey`；发送成功后 WS `user-attachments-ready` 下发同一套 URL，实时气泡与历史展示一致。
 
 ## 6. 删除对话时的 OSS 清理
 
@@ -159,7 +161,7 @@ sequenceDiagram
 
 聊天图片占用默认 Bucket（`j2agent.storage.bucket`），**不会**出现在 `/#/files` 虚拟目录树中（前缀 `chat/` 与管理员文件管理 UI 分离），但对象与 `object_file` 台账仍由同一套对象存储服务维护。
 
-文件管理页「预览/下载」与聊天附件共用 `j2agent.storage.chat-attachment-display`：proxy 时走 `GET /files/content?object-key=...`，direct 时走 `GET /files/preview` 返回的预签名 URL。
+文件管理页「预览/下载」与聊天附件共用 `j2agent.storage.access-mode`：proxy 时走 `GET /files/content?object-key=...`，direct 时走 `GET /files/preview` 返回的预签名 URL。
 
 删除保护：`ObjectFileManagementService#delete` 在删除前检查 `ObjectFileReferenceService#isReferenced`。
 
