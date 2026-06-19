@@ -13,7 +13,7 @@
 | [Agent-UI 交互机制](平台/agent-ui交互机制/README.md) | 状态机、`AgentUiEventEnvelope`、WebSocket 事件 |
 | [插件 Agent 接入与界面](平台/插件Agent接入与界面/README.md) | 插件 JAR → 注册 → REST/WebSocket 全链路 |
 | [文件管理与对象存储](平台/文件管理与对象存储/README.md) | 虚拟目录、直传、差异检查、MinIO/OSS/七牛/R2 |
-| [聊天图片附件](平台/聊天图片附件/README.md) | 对话图片上传、展示模式、引用保护与 LLM 投递 |
+| [聊天图片附件](平台/聊天图片附件/README.md) | 对话图片上传、访问模式、引用保护与 LLM 投递 |
 
 ## 基础设施 — 部署与运维
 

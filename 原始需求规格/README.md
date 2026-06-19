@@ -71,7 +71,7 @@
 | REQ-PLAT-010 | 平台 | 用户鉴权与 RBAC | Cookie 会话；LoginInterceptor 鉴权；ADMIN/USER 角色矩阵；内置 aiadmin 不可删改。 | — | 已实现 | [PLAT-SEC-001~006](#plat-sec) | [安全与用户](../平台/安全与用户/README.md) | `LoginInterceptor`, `UserController`, `LoginController` |
 | REQ-PLAT-011 | 平台 | 邮箱注册与找回密码 | 邮箱自助注册（开关+白名单）；SMTP 发信；邮箱验证码找回密码。 | — | 已实现 | [PLAT-SEC-007~010](#plat-sec) | [邮箱注册机制](../平台/安全与用户/邮箱注册机制.md) | `RegisterController`, `ResetPasswordController`, `EmailRegisterService` |
 | REQ-PLAT-012 | 平台 | 对象存储与文件管理 | 多 OSS 供应商；浏览器直传；上传/删除对账；OSS-DB 差异检查与人工处置。 | — | 已实现 | [PLAT-FILE-001~008](#plat-file) | [文件管理与对象存储](../平台/文件管理与对象存储/README.md) | `FileManagementController`, `ObjectStorageService` |
-| REQ-PLAT-013 | 平台 | 聊天图片附件 | 对话图片上传（限 4 张）；proxy/direct 展示；WebSocket Base64 发送；删除会话 OSS 清理。 | — | 已实现 | [PLAT-IMG-001~005](#plat-img) | [聊天图片附件](../平台/聊天图片附件/README.md) | `ChatFileController`, `ChatAttachmentService` |
+| REQ-PLAT-013 | 平台 | 聊天图片附件 | 对话图片上传（限 4 张）；proxy/direct 访问模式；WebSocket Base64 发送；删除会话 OSS 清理。 | — | 已实现 | [PLAT-IMG-001~005](#plat-img) | [聊天图片附件](../平台/聊天图片附件/README.md) | `ChatFileController`, `ChatAttachmentService` |
 
 ### 2.2 前端
 
@@ -219,7 +219,7 @@ flowchart TB
 | PLAT-FILE-005 | 删除引用保护 | object_file_reference 存在时 409；删除补偿延迟队列 | 已实现 | 同上 | `ObjectDeleteReconcileWorker` |
 | PLAT-FILE-006 | OSS-DB 差异检查 | 管理员手动触发；OSS_ONLY/DB_ONLY/METADATA_MISMATCH/IN_PROGRESS | 已实现 | 同上 | `ObjectStorageSyncService` |
 | PLAT-FILE-007 | 差异人工处置 | REGISTER_DB/DELETE_OSS/DELETE_DB/UPDATE_DB/DELETE_BOTH；STALE 重扫 | 已实现 | 同上 | `ObjectStorageSyncService` |
-| PLAT-FILE-008 | 签名 URL 预览下载 | 15 分钟有效期；proxy/direct 展示模式 | 已实现 | 同上 | `ObjectStorageService` |
+| PLAT-FILE-008 | 签名 URL 预览下载 | 15 分钟有效期；proxy/direct 访问模式（`access-mode` / `J2AGENT_STORAGE_ACCESS_MODE`） | 已实现 | 同上 | `ObjectStorageService` |
 
 ### 4.8 平台 — 聊天图片附件 {#plat-img}
 
@@ -227,7 +227,7 @@ flowchart TB
 |----------|----------|----------|------|----------|----------|
 | PLAT-IMG-001 | 对话图片上传限制 | 单消息最多 4 张；前端转 JPEG 最长边 2048px；服务端 JPEG/PNG/WebP ≤10MB | 已实现 | [聊天图片附件](../平台/聊天图片附件/README.md) | `ChatAttachmentService` |
 | PLAT-IMG-002 | 对象键规则 | chat/{userId}/{contextId}/{UUIDv7}_{文件名}；发送时服务端上传 | 已实现 | 同上 | `ChatAttachmentService` |
-| PLAT-IMG-003 | 展示模式 proxy/direct | proxy 经应用转发；direct 预签名直链；失败降级 proxy | 已实现 | 同上 | `ChatAttachmentUrlResolver` |
+| PLAT-IMG-003 | 访问模式 proxy/direct | `j2agent.storage.access-mode`（`J2AGENT_STORAGE_ACCESS_MODE`）；proxy 经应用转发；direct 预签名直链；失败降级 proxy | 已实现 | 同上 | `ChatAttachmentUrlResolver` |
 | PLAT-IMG-004 | WebSocket attachments | Base64 data 发送；持久化仅存 objectKey；LLM 从 OSS 读字节 | 已实现 | 同上 | `ChatController`, `ChatAttachmentService` |
 | PLAT-IMG-005 | 删除会话 OSS 清理 | deleteByConversationId 清引用与孤儿文件；整 context 删除前缀清扫 | 已实现 | 同上 | `ChatContextService` |
 

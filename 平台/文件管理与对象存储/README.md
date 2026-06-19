@@ -38,6 +38,8 @@ j2agent:
     # minio、oss、qiniu、r2
     type: minio
     bucket: j2agent-files
+    # 访问方式：proxy=同源 content 代理（默认）；direct=OSS 预签名直链
+    access-mode: proxy
     sync:
       retention-days: 7
       cleanup-cron: "0 30 2 * * *"
@@ -99,7 +101,18 @@ j2agent:
 
 `domain` 是默认 Bucket 绑定的下载域名，可以带或不带协议。当前实现会移除协议和末尾 `/`，再按 `use-https` 生成私有下载 URL。
 
-### 2.4 Docker 环境变量
+### 2.4 对象存储访问模式
+
+`j2agent.storage.access-mode`（环境变量 `J2AGENT_STORAGE_ACCESS_MODE`）控制预览、下载与浏览器直传上传凭证的 URL 交付方式（聊天附件与文件管理共用）：
+
+| 值 | 说明 |
+|---|---|
+| `proxy`（默认） | 经应用服务器 content 端点转发（`/files/content`、`/files/upload/content` 等） |
+| `direct` | 返回 OSS 预签名直链，浏览器直连对象存储 |
+
+详见 [聊天图片附件 §2.1](聊天图片附件/README.md#21-对象存储访问模式)。
+
+### 2.5 Docker 环境变量
 
 `j2agent/docker/.env` 可配置：
 
@@ -107,6 +120,7 @@ j2agent:
 J2AGENT_STORAGE_ENABLED=true
 J2AGENT_STORAGE_TYPE=minio
 J2AGENT_STORAGE_BUCKET=j2agent-files
+J2AGENT_STORAGE_ACCESS_MODE=proxy
 J2AGENT_S3_ENDPOINT=http://minio:9000
 J2AGENT_S3_ACCESS_KEY_ID=minioadmin
 J2AGENT_S3_SECRET_ACCESS_KEY=change-me
@@ -487,7 +501,7 @@ ETag 比较前会去除首尾引号。最后修改时间按秒归一化后比较
 | `POST` | `/files/upload/heartbeat` | PUT 进行中上报心跳，暂停对账 attempt 计数 |
 | `DELETE` | `/files?object-key=...` | 删除单个文件 |
 | `POST` | `/files/delete-batch` | 批量删除文件 |
-| `GET` | `/files/preview?object-key=...` | 按 `chat-attachment-display` 返回展示 URL（proxy 为 content 代理，direct 为短期预签名） |
+| `GET` | `/files/preview?object-key=...` | 按 `access-mode` 返回展示 URL（proxy 为 content 代理，direct 为短期预签名） |
 | `GET` | `/files/content?object-key=...` | PROXY 模式预览地址；亦作 DIRECT 模式失败时的降级 |
 | `POST` | `/files/sync/tasks` | 创建异步扫描任务 |
 | `GET` | `/files/sync/tasks/latest` | 查询最近一次成功差异检查 |
