@@ -136,11 +136,11 @@ server 名称与 `mcp-config-json` → `mcpServers` 的键名一致。
 
 ### 4.3 业务示例
 
-本仓库 [`qa-assistant`](../../j2agent-plugins-agents/agents/qa-assistant/) 的 `AssistantReactAgent`：
+本仓库 [`mcp-assistant`](../../j2agent-plugins-agents/agents/mcp-assistant/) 的 `McpAssistantAgent`：
 
 ```java
 @Component
-public class AssistantReactAgent extends AiAgent implements McpFeature {
+public class McpAssistantAgent extends AiAgent implements McpFeature {
 
     @Override
     protected Object[] buildTools() {
