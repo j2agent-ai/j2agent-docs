@@ -9,7 +9,7 @@
 | [RAG 机制](平台/RAG机制/README.md) | 知识库同步、融合检索、静态文件展示 |
 | [安全与用户](平台/安全与用户/README.md) | 用户权限、邮箱注册 |
 | [LLM 提供商配置](平台/LLM提供商配置/README.md) | `api_provider_config`、深度思考元数据 |
-| [Agent 对话记录](平台/agent对话记录/README.md) | 多轮记忆、`conversationId`、Redis/JDBC、流式进行中状态 |
+| [Agent 记忆机制](平台/agent记忆机制/README.md) | 多轮记忆、`conversationId`、滑动窗口、Redis/JDBC、流式进行中状态 |
 | [Agent-UI 交互机制](平台/agent-ui交互机制/README.md) | 状态机、`AgentUiEventEnvelope`、WebSocket 事件 |
 | [插件 Agent 接入与界面](平台/插件Agent接入与界面/README.md) | 插件 JAR → 注册 → REST/WebSocket 全链路 |
 | [文件管理与对象存储](平台/文件管理与对象存储/README.md) | 虚拟目录、直传、差异检查、MinIO/OSS/七牛/R2 |
