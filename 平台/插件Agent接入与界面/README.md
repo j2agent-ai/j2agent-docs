@@ -74,7 +74,7 @@ flowchart TB
   - **`context-id`**：业务会话上下文 ID，必填。
   - **`agent-id`**：与 `getAgentId()` 一致（如聊天助手为 **`chat_assistant`**），必填；缺失时服务端下发失败态事件并关闭连接。
 - **会话属性**：`agentId` 存入 WebSocket session，随后在 **`handleTextMessage`** 中随 `ChatRequestDto` 一并交给 **`ChatService#handleChat(..., agentId)`**。
-- **运行时选择**：`ChatService` 内 **`agentRouter.route(agentId)`** 得到具体 `AiAgent`，再按 [Agent 对话记录机制](../agent对话记录/README.md) 组装 **`conversationId = userId:contextId:agentId`** 与 **`AgentRunContext`**，调用 **`AiAgent#stream`**。
+- **运行时选择**：`ChatService` 内 **`agentRouter.route(agentId)`** 得到具体 `AiAgent`，再按 [Agent 记忆机制](../agent记忆机制/README.md) / [对话记忆](../agent记忆机制/对话记忆.md) 组装 **`conversationId = userId:contextId:agentId`** 与 **`AgentRunContext`**，调用 **`AiAgent#stream`**。
 
 因此：**界面展示的「选中的智能体」必须落到连接上的 `agent-id` 与每条业务会话的 context**，才能保证记忆与历史与 `AgentRouter` 中的键一致。
 
@@ -93,7 +93,7 @@ flowchart TB
 
 1. Agent 类 **`@Component` + `extends AiAgent`**；同 JAR 内依赖 Bean 亦需 Spring 注解；**`getAgentId()`** 全局唯一。
 2. 将 tar.gz 解压到 **`j2agent.plugin.path`**，启动或 **`POST /v1/rest/j2agent/agents/reload`** 后确认 `loadedAgentIds` 含新 id。
-3. 前端列表与 WebSocket / 历史接口使用同一 **`agent-id`**（见 [Agent 对话记录机制](../agent对话记录/README.md)）。
+3. 前端列表与 WebSocket / 历史接口使用同一 **`agent-id`**（见 [Agent 记忆机制](../agent记忆机制/README.md)）。
 4. 若需兼容旧客户端字符串，在 **`AgentRouter#route`** 增加别名映射（已有 `assistant` → `chat_assistant`）。
 
 ## 9. 关键代码位置索引
