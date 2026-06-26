@@ -84,4 +84,4 @@ j2agent:
 
 Query 预处理链（Multimodal / Compression / Rewrite）**平台默认全开**，无独立配置项。详见 [Query预处理](检索/Query预处理.md)。
 
-Embedding 提供商连接见 [LLM 提供商配置](../LLM提供商配置/README.md)。对话记忆见 [Agent 对话记录机制](../agent对话记录/README.md)。
+Embedding 提供商连接见 [LLM 提供商配置](../LLM提供商配置/README.md)。对话记忆见 [Agent 记忆机制](../agent记忆机制/README.md) / [对话记忆](../agent记忆机制/对话记忆.md)。

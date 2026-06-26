@@ -61,7 +61,7 @@
 |----------|------|----------|----------|--------|------|----------|----------|----------|
 | REQ-PLAT-001 | 平台 | Agent 运行时与多智能体路由 | 基于 Spring AI Alibaba ReactAgent 提供单轮/流式推理；AgentRouter 按 agent-id 分发；插件 JAR 中 extends AiAgent 的业务 Agent 经 Spring 注入自动注册。 | — | 已实现 | [PLAT-PLUGIN-001~006](#plat-plugin) | [插件 Agent 接入与界面](../平台/插件Agent接入与界面/README.md) | `AiAgent`, `AgentRouter`, `ChatService`, `ChatController` |
 | REQ-PLAT-002 | 平台 | Agent-UI 事件流与状态机 | WebSocket 推送 AgentUiEventEnvelope；8 态状态机驱动前端展示工具调用、Skill 加载、深度思考与终态收敛。 | — | 已实现 | [PLAT-UI-001~010](#plat-ui) | [Agent-UI 交互机制](../平台/agent-ui交互机制/README.md) | `AgentTurnStateMachine`, `AgentUiEventEnvelope` |
-| REQ-PLAT-003 | 平台 | 对话记忆与多轮上下文 | conversationId 复合键；Append-only 窗口记忆；Redis 缓存 + JDBC 持久化；流式进行中登记与中断补偿。 | — | 已实现 | [PLAT-CHAT-001~006](#plat-chat) | [Agent 对话记录](../平台/agent对话记录/README.md) | `RedissonCachingChatMemoryRepository`, `ChatContextService`, `ActiveChatTurnRegistry` |
+| REQ-PLAT-003 | 平台 | 对话记忆与多轮上下文 | conversationId 复合键；Append-only 窗口记忆；Redis 缓存 + JDBC 持久化；流式进行中登记与中断补偿。 | — | 已实现 | [PLAT-CHAT-001~006](#plat-chat) | [Agent 记忆机制](../平台/agent记忆机制/README.md) | `RedissonCachingChatMemoryRepository`, `ChatContextService`, `ActiveChatTurnRegistry` |
 | REQ-PLAT-004 | 平台 | RAG 知识库维护与检索 | knowledge-repo 文档增量同步至 Milvus；稠密+稀疏混合检索；超长 Query 多段融合；静态文件 URL 改写与直链。 | — | 已实现 | [PLAT-RAG-001~014](#plat-rag) | [RAG 机制](../平台/RAG机制/README.md) | `KnowledgeRepoSyncService`, `MilvusService`, `Retriever` |
 | REQ-PLAT-005 | 平台 | RAG Rerank 重排序 | 对检索结果进行 Rerank 排序与过滤，提升 RAG 召回质量。 | P2 | 规划中 | — | [j2agent README 待完善](../../j2agent/README.md) | — |
 | REQ-PLAT-006 | 平台 | 知识库 CRUD 管理界面 | 支持知识库创建、导入、导出、删除等完整生命周期管理。当前以文件直传模式为主，手动 CRUD API 返回 405。 | P2 | 部分实现 | [PLAT-RAG-014](#plat-rag) | README 待完善 + [知识库维护](../平台/RAG机制/知识库维护/知识库维护.md) | `KnowledgeController` |
@@ -171,11 +171,11 @@ flowchart TB
 | PLAT-LLM-004 | SpringAiReasoningMetadataAdapter | 统一各 ChatModel metadata 为 reasoningContent | 已实现 | 同上 | `SpringAiReasoningMetadataAdapter` |
 | PLAT-LLM-005 | Provider 配置热更新 | 修改当前项发布 ProviderConfigChangedEvent；AiRuntimeReloadService 热更新 | 已实现 | 同上 | `AiRuntimeReloadService`, `ProviderConfigController` |
 
-### 4.4 平台 — Agent 对话记录 {#plat-chat}
+### 4.4 平台 — Agent 记忆机制 {#plat-chat}
 
 | 需求编号 | 需求名称 | 需求描述 | 状态 | 文档来源 | 代码验证 |
 |----------|----------|----------|------|----------|----------|
-| PLAT-CHAT-001 | conversationId 复合键 | 格式 userId:contextId:agentId；兼容两段老格式 | 已实现 | [Agent 对话记录](../平台/agent对话记录/README.md) | `CompositeKeyChatMemoryRepository` |
+| PLAT-CHAT-001 | conversationId 复合键 | 格式 userId:contextId:agentId；兼容两段老格式 | 已实现 | [Agent 记忆机制](../平台/agent记忆机制/README.md) / [对话记忆](../平台/agent记忆机制/对话记忆.md) | `CompositeKeyChatMemoryRepository` |
 | PLAT-CHAT-002 | Append-only 窗口记忆 | 运行时窗口 100 条；持久化 Redis+JDBC 全量；add 仅 delta | 已实现 | 同上 | `RedissonCachingChatMemoryRepository` |
 | PLAT-CHAT-003 | ReAct 兼容记忆 Advisor | 无 AssistantMessage 时 prepend 历史；工具循环后续跳不重复 prepend | 已实现 | 同上 | `ReactCompatibleMessageChatMemoryAdvisor` |
 | PLAT-CHAT-004 | 历史 REST API | getHistory 必填 agent-id；delete 可选 agent-id；clear-all 跳过运行中会话 | 已实现 | 同上 | `ChatController`, `ChatContextService` |

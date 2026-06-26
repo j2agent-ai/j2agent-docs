@@ -12,8 +12,15 @@
 |------|------|
 | `getAgentId()` | 全局唯一标识；与 WebSocket `agent-id`、DB/Redis 中 `agent_id` 一致 |
 | `getAgentName()` | 智能体展示名称（`GET /agents` 列表） |
-| `getAgentDescription()` | 智能体描述文案 |
+| `getAgentDescription()` | 智能体描述文案（`GET /agents` 列表展示） |
 | `loadSystemPrompt()` | 系统提示词；可从 classpath 读取或直接返回字符串 |
+
+`getAgentDescription()` 与可选的 `getDispatchPrompt()`（调度提示词）分工：
+
+| 方法 | 受众 | 暴露 |
+|------|------|------|
+| `getAgentDescription()` | 用户 / 智能体卡片 | `AgentInfoDto.description` |
+| `getDispatchPrompt()` | 通用助手 `query_intent_agents` 路由 LLM | 仅服务端内部；未 override 时 `resolveDispatchPrompt()` 回退为 description |
 
 ### 1.2 可选 override
 
@@ -21,6 +28,7 @@
 |------|------|------|
 | `getSort()` | `100` | 业务排序权重；`GET /agents` 按升序排列，相同时按 `agentId` 字典序 |
 | `getLogo()` | `🤖` | 列表与聊天页 emoji logo；子类可 override |
+| `getDispatchPrompt()` | `null`（回退 `getAgentDescription()`） | **调度提示词**：仅供 `query_intent_agents` 开放召回，**不出现在** `GET /agents`；宜写**能力域 + 典型问法**，帮助调度器想起来；不必写死互斥判决（消歧与是否 `call_sub_agent` 由通用助手决定） |
 | `getThinkingOverride()` | `USE_PROVIDER_DEFAULT` | Agent 级深度思考默认策略；见 [可选能力.md](可选能力.md) |
 | `isQaTemplateEnabled()` | `false` | 是否启用热门问题模板 |
 | `isRagSourceDisplayEnabled()` | `false` | 是否向前端展示 RAG 来源（`rag_infos` 仍落库） |
@@ -92,6 +100,11 @@ public class DemoAgent extends AiAgent {
     @Override
     public String getAgentDescription() {
         return "最小接入示例，用于验证插件加载与对话链路。";
+    }
+
+    @Override
+    public String getDispatchPrompt() {
+        return "能力域 + 典型用户问法示例，供 query_intent_agents 开放召回；无需写死互斥判决。";
     }
 
     @Override
