@@ -49,14 +49,15 @@ flowchart LR
 
 ## 通用助手与调用子智能体记忆
 
-平台内置 **`universal_assistant`（AI 助手）** 与插件专业 Agent 共用同一套 `ChatMemory` / Advisor，但同一 `contextId` 下可能同时存在 **两条独立会话键**：
+平台内置 **`universal_assistant`（AI 助手）** 与插件专业 Agent 共用同一套 `ChatMemory` / Advisor。同一 `contextId` 下可存在 **多条会话键**（按 `agent_id` 隔离），但编排委派与直接访问的落库行为不同：
 
 | 场景 | 会话键第三段 | 记忆内容 |
 |------|--------------|----------|
 | 用户在 AI 助手入口对话 | `universal_assistant` | 用户消息、assistant（来自子智能体 bridge 或主 ReAct；编排 Trace 不落库） |
-| 调用子智能体执行专业 Agent | `<targetAgentId>`（如 `j2agent-qa-assistant`） | 提炼 query、专业 Agent 完整 ReAct 与 assistant |
+| 编排 Hook 委派子智能体 | `universal_assistant`（同上） | 委派过程 `subAgentCallRun=true`，Advisor **跳过**专业键读写；可见答复仅落 universal 键 |
+| 用户直接进入专业 Agent | `<targetAgentId>`（如 `j2agent-qa-assistant`） | 完整 user / assistant 历史 |
 
-编排 Hook 以 `subAgentCallRun=true` 无状态调用子智能体，聊天记录写入 `universal_assistant` 键；委派问答不落入专业 Agent 会话键。
+编排 Hook 以 `subAgentCallRun=true` 无状态调用子智能体；`userId:contextId:targetAgentId` 在委派时仅作运行时上下文（thinking、RAG 等），**不**持久化 ReAct 轮次。
 
 详见 [平台通用助手 — 子智能体调用与记忆](../通用助手/子智能体调用与记忆.md)。
 
