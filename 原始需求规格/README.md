@@ -202,7 +202,7 @@ flowchart TB
 | 需求编号 | 需求名称 | 需求描述 | 状态 | 文档来源 | 代码验证 |
 |----------|----------|----------|------|----------|----------|
 | PLAT-PLUGIN-001 | 插件 JAR 动态加载 | tar.gz 解压到 plugin.path；AgentPluginRegistry 扫描 Spring 组件；支持热重载 | 已实现 | [插件 Agent 接入与界面](../平台/插件Agent接入与界面/README.md) | `AgentPluginRegistry`, `AgentPluginInstallService` |
-| PLAT-PLUGIN-002 | AgentRouter 路由 | List&lt;AiAgent&gt; 聚合；route(agentId)；assistant→chat_assistant 别名 | 已实现 | 同上 | `AgentRouter` |
+| PLAT-PLUGIN-002 | AgentRouter 路由 | List&lt;AiAgent&gt; 聚合；route(agentId)；assistant/chat_assistant→mcp_assistant 别名 | 已实现 | 同上 | `AgentRouter` |
 | PLAT-PLUGIN-003 | GET /agents 列表 | 返回 agentId/name/description/showHotQuestions；按 agentId 字典序 | 已实现 | 同上 | `ChatController` |
 | PLAT-PLUGIN-004 | WebSocket 对话通道 | /ws/rest/j2agent/chat?context-id=&agent-id= | 已实现 | 同上 | `ChatController` |
 | PLAT-PLUGIN-005 | MCP 刷新 Agent 重建 | McpToolCallbacksRefreshedEvent → 全部 AiAgent rebuildAgent() | 已实现 | 同上 | `McpToolCallbacksRefreshedListener` |

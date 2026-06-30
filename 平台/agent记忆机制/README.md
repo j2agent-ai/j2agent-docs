@@ -31,6 +31,7 @@ flowchart LR
 | 文档 / 章节 | 说明 |
 |-------------|------|
 | [对话记忆](对话记忆.md) | 双轨设计、`MessageWindowTrimmer`、ReAct prepend、Redis/JDBC cache-aside |
+| [通用助手与调用子智能体记忆](#通用助手与调用子智能体记忆) | `universal_assistant` 与专业 Agent 双会话键 |
 | [会话键](#会话键) | `conversationId` 格式与库表对应 |
 | [REST / WebSocket 历史](#rest--websocket-历史) | 历史接口与删除规则 |
 | [中断与补偿](#中断与补偿) | 流中断时 assistant 落库补偿 |
@@ -45,6 +46,19 @@ flowchart LR
 - **兼容**：两段老键 `userId:contextId` 第三段按空串解析；`userId` 为空时用 `anonymous`。
 
 记忆读写、Redis key、按 `agentId` 隔离详见 [对话记忆 §8](对话记忆.md#8-会话隔离conversationid)。
+
+## 通用助手与调用子智能体记忆
+
+平台内置 **`universal_assistant`（AI 助手）** 与插件专业 Agent 共用同一套 `ChatMemory` / Advisor，但同一 `contextId` 下可能同时存在 **两条独立会话键**：
+
+| 场景 | 会话键第三段 | 记忆内容 |
+|------|--------------|----------|
+| 用户在 AI 助手入口对话 | `universal_assistant` | 用户消息、ReAct `tool_calls` / tool result、最终 assistant |
+| 调用子智能体执行专业 Agent | `<targetAgentId>`（如 `j2agent-qa-assistant`） | 提炼 query、专业 Agent 完整 ReAct 与 assistant |
+
+调用子智能体时 `call_sub_agent` 以 `subAgentCallRun=false` 切入专业键，子 Agent 正常读写专业历史；用户之后从「智能体」直进同一 `contextId` + `agentId` 时可续聊调用内容。通用键侧保留工具轨迹，便于在 AI 助手内追问「刚才那个文档问题」。
+
+详见 [平台通用助手 — 子智能体调用与记忆](../通用助手/子智能体调用与记忆.md)。
 
 ## REST / WebSocket 历史
 

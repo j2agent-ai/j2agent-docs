@@ -12,8 +12,15 @@
 |------|------|
 | `getAgentId()` | 全局唯一标识；与 WebSocket `agent-id`、DB/Redis 中 `agent_id` 一致 |
 | `getAgentName()` | 智能体展示名称（`GET /agents` 列表） |
-| `getAgentDescription()` | 智能体描述文案 |
+| `getAgentDescription()` | 智能体描述文案（`GET /agents` 列表展示） |
 | `loadSystemPrompt()` | 系统提示词；可从 classpath 读取或直接返回字符串 |
+
+`getAgentDescription()` 与可选的 `getDispatchPrompt()`（调度提示词）分工：
+
+| 方法 | 受众 | 暴露 |
+|------|------|------|
+| `getAgentDescription()` | 用户 / 智能体卡片 | `AgentInfoDto.description` |
+| `getDispatchPrompt()` | 通用助手 `query_intent_agents` 路由 LLM | 仅服务端内部；未 override 时 `resolveDispatchPrompt()` 回退为 description |
 
 ### 1.2 可选 override
 
@@ -21,6 +28,7 @@
 |------|------|------|
 | `getSort()` | `100` | 业务排序权重；`GET /agents` 按升序排列，相同时按 `agentId` 字典序 |
 | `getLogo()` | `🤖` | 列表与聊天页 emoji logo；子类可 override |
+| `getDispatchPrompt()` | `null`（回退 `getAgentDescription()`） | **调度提示词**：仅供 `query_intent_agents` 开放召回，**不出现在** `GET /agents`；宜写**能力域 + 典型问法**，帮助调度器想起来；不必写死互斥判决（消歧与是否 `call_sub_agent` 由通用助手决定） |
 | `getThinkingOverride()` | `USE_PROVIDER_DEFAULT` | Agent 级深度思考默认策略；见 [可选能力.md](可选能力.md) |
 | `isQaTemplateEnabled()` | `false` | 是否启用热门问题模板 |
 | `isRagSourceDisplayEnabled()` | `false` | 是否向前端展示 RAG 来源（`rag_infos` 仍落库） |
@@ -63,7 +71,7 @@
 | 检测位置 | `AgentClassLoaderSkillRegistry` | `AiAgent.buildToolCallbacks()` |
 | 未实现时 | 不加载外部技能（内部 `skills/` 仍默认加载） | 不合并任何 MCP 工具 |
 
-业务示例：`qa-assistant` 的 `AssistantReactAgent` 已实现 `McpFeature`。
+业务示例：`mcp-assistant` 的 `McpAssistantAgent` 已实现 `McpFeature`。
 
 ## 2. 最小示例
 
@@ -92,6 +100,11 @@ public class DemoAgent extends AiAgent {
     @Override
     public String getAgentDescription() {
         return "最小接入示例，用于验证插件加载与对话链路。";
+    }
+
+    @Override
+    public String getDispatchPrompt() {
+        return "能力域 + 典型用户问法示例，供 query_intent_agents 开放召回；无需写死互斥判决。";
     }
 
     @Override
@@ -160,7 +173,7 @@ sequenceDiagram
 
 ### 4.3 历史别名（可选）
 
-若需兼容旧客户端字符串，在平台侧 `AgentRouter#route` 增加映射（如已有 `assistant` → `chat_assistant`）。新 Agent 建议使用稳定的新 id，避免依赖别名。
+若需兼容旧客户端字符串，在平台侧 `AgentRouter#route` 增加映射（如已有 `assistant`、`chat_assistant` → `mcp_assistant`）。新 Agent 建议使用稳定的新 id，避免依赖别名。
 
 ## 5. 部署与热重载
 
@@ -179,7 +192,7 @@ j2agent-plugins-agents/
   agents/
     pom.xml                             # 示例聚合（可选，勿对外继承）
     0_example-agent/                    # ★ 最小模板，复制此目录
-    qa-assistant/                       # 业务示例 Agent
+    mcp-assistant/                      # MCP 接入助手示例 Agent
 ```
 
 工程骨架见 [快速入门](README.md#2-最小工程骨架)；打包配置见 [0_example-agent README](../agents/0_example-agent/README.md)。
@@ -189,7 +202,7 @@ j2agent-plugins-agents/
 **方式 A：单 Agent 独立打包**（推荐 CI 按 Agent 拆分）：
 
 ```bash
-cd j2agent-plugins-agents/agents/qa-assistant && mvn -q clean package
+cd j2agent-plugins-agents/agents/mcp-assistant && mvn -q clean package
 ```
 
 **方式 B：本仓库一键编译全部示例**：
@@ -239,8 +252,8 @@ tar -xzf target/example-agent-1.0.0-SNAPSHOT.tar.gz \
 ```text
 plugins/                               # j2agent.plugin.path 指向此目录
   agents/
-    qa-assistant-1.0.0-SNAPSHOT/
-      qa-assistant-1.0.0-SNAPSHOT.jar
+    mcp-assistant-1.0.0-SNAPSHOT/
+      mcp-assistant-1.0.0-SNAPSHOT.jar
       resources/...
     example-agent-1.0.0-SNAPSHOT/
       ...
@@ -255,7 +268,7 @@ plugins/                               # j2agent.plugin.path 指向此目录
 
 | 接口 | 说明 |
 |------|------|
-| `GET /v1/rest/j2agent/plugins/agents` | 返回插件 JAR 路径列表（含子目录相对路径，如 `qa-assistant-1.0.0-SNAPSHOT/qa-assistant-1.0.0-SNAPSHOT.jar`）、已加载 `agentId` |
+| `GET /v1/rest/j2agent/plugins/agents` | 返回插件 JAR 路径列表（含子目录相对路径，如 `mcp-assistant-1.0.0-SNAPSHOT/mcp-assistant-1.0.0-SNAPSHOT.jar`）、已加载 `agentId` |
 | `POST /v1/rest/j2agent/agents/reload` | 重新扫描目录并注册 Agent |
 
 典型日志关键字：
