@@ -73,23 +73,27 @@ sequenceDiagram
 - **决策**（`UniversalDispatchDecisionService`）：在候选与已执行 Trace 上输出 `invoke` 或 `complete`；同轮同一 `agentId` 不重复调用。
 - **终答路径**：至少一次子调用后 → 子智能体流式输出即用户可见答复；主模型**不**二次汇总。
 
-## 5. 双轨记忆
+## 5. 记忆与落库
 
 ```mermaid
 flowchart LR
-  subgraph universalMem ["universal_assistant 键"]
+  subgraph universalMem ["universal_assistant 键（落库）"]
     U[user + assistant 来自 bridge 或主 ReAct]
   end
-  subgraph specialistMem ["targetAgentId 键"]
-    S[refined query + 专业 ReAct + assistant]
+  subgraph specialistRuntime ["targetAgentId 运行时（不落库）"]
+    R[thinking 覆盖 / RAG holder]
   end
-  Call[SubAgentCallService] --> specialistMem
-  universalMem --> Call
+  Call[SubAgentCallService] --> specialistRuntime
+  Call --> Bridge[SubAgentStreamBridge]
+  Bridge --> U
 ```
 
-- **通用助手会话键**：`userId:contextId:universal_assistant`。
+- **通用助手会话键**：`userId:contextId:universal_assistant`；用户可见对话均落此键。
 - **编排 Trace**：仅供给调度 LLM，**不**写入 universal ChatMemory。
-- **子智能体调用期间**：读写 `userId:contextId:<targetAgentId>` 完整记忆。
+- **编排委派**（`subAgentCallRun=true`）：子智能体 ReAct **不读写**专业 Agent 的 ChatMemory；流式正文经 `SubAgentStreamBridge` → `persistStreamedAssistant` 写入 universal 键。
+- **直接访问专业 Agent**：另起会话键 `userId:contextId:<targetAgentId>`，走常规 Advisor 落库。
+
+详见 [子智能体调用与记忆](子智能体调用与记忆.md)。
 
 ## 6. 平台能力
 
@@ -106,7 +110,7 @@ System Prompt：`j2agent/j2agent-server/src/main/resources/prompts/universal-ass
 ## 7. 与专业智能体的关系
 
 - **可调用子智能体列表**：`AgentRouter.listCallableSubAgents()` = 全部已注册 `AiAgent` **减去** `universal_assistant`。
-- **同一 contextId**：子智能体调用写入的专业记忆键为 `userId:contextId:<targetAgentId>`。
+- **同一 contextId**：编排委派**不**写入 `userId:contextId:<targetAgentId>`；仅用户直接进入该专业 Agent 时才会在该键下积累历史。
 
 ## 8. 前端轨迹
 
