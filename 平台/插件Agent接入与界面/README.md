@@ -57,7 +57,7 @@ flowchart TB
 
 - **`getAgentId()`**：`mcp_assistant`
 - **`getAgentName()` / `getAgentDescription()`**：供列表与卡片展示文案。
-- **`getDispatchPrompt()`**（可选）：调度提示词，仅供 `query_intent_agents` 内部路由，**不**映射到 `AgentInfoDto`、不展示到界面；未实现时回退 `getAgentDescription()`。
+- **`getDispatchPrompt()`**（可选）：调度提示词，仅供通用助手**被动意图召回**内部路由，**不**映射到 `AgentInfoDto`、不展示到界面；未实现时回退 `getAgentDescription()`。
 - **`getSort()`**：基类默认 100；助手覆盖为 **1**；`listRegisteredAgents` 按 **sort 升序、再 agentId 字典序**排序。
 - **`getLogo()`**：基类默认 `🤖`；助手可覆盖为自定义 emoji；经 `AgentInfoDto.logo` 供列表与聊天页展示（全局 `chatLogoUrl` 仍优先）。
 - **`getThinkingOverride()`**（可选）：Agent 级默认深度思考策略；默认 `USE_PROVIDER_DEFAULT`。单轮可被 WebSocket 消息体 `ChatRequestDto.thinkingMode` 覆盖（优先级更高）。

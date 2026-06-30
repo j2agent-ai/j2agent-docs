@@ -60,7 +60,7 @@
 | 需求编号 | 模块 | 需求名称 | 需求描述 | 优先级 | 状态 | 详细需求 | 文档来源 | 代码验证 |
 |----------|------|----------|----------|--------|------|----------|----------|----------|
 | REQ-PLAT-001 | 平台 | Agent 运行时与多智能体路由 | 基于 Spring AI Alibaba ReactAgent 提供单轮/流式推理；AgentRouter 按 agent-id 分发；插件 JAR 中 extends AiAgent 的业务 Agent 经 Spring 注入自动注册。 | — | 已实现 | [PLAT-PLUGIN-001~006](#plat-plugin) | [插件 Agent 接入与界面](../平台/插件Agent接入与界面/README.md) | `AiAgent`, `AgentRouter`, `ChatService`, `ChatController` |
-| REQ-PLAT-002 | 平台 | Agent-UI 事件流与状态机 | WebSocket 推送 AgentUiEventEnvelope；8 态状态机驱动前端展示工具调用、Skill 加载、深度思考与终态收敛。 | — | 已实现 | [PLAT-UI-001~010](#plat-ui) | [Agent-UI 交互机制](../平台/agent-ui交互机制/README.md) | `AgentTurnStateMachine`, `AgentUiEventEnvelope` |
+| REQ-PLAT-002 | 平台 | Agent-UI 事件流与状态机 | WebSocket 推送 AgentUiEventEnvelope；9 态状态机驱动前端展示被动调度、工具调用、Skill 加载、深度思考与终态收敛。 | — | 已实现 | [PLAT-UI-001~010](#plat-ui) | [Agent-UI 交互机制](../平台/agent-ui交互机制/README.md) | `AgentTurnStateMachine`, `AgentUiEventEnvelope` |
 | REQ-PLAT-003 | 平台 | 对话记忆与多轮上下文 | conversationId 复合键；Append-only 窗口记忆；Redis 缓存 + JDBC 持久化；流式进行中登记与中断补偿。 | — | 已实现 | [PLAT-CHAT-001~006](#plat-chat) | [Agent 记忆机制](../平台/agent记忆机制/README.md) | `RedissonCachingChatMemoryRepository`, `ChatContextService`, `ActiveChatTurnRegistry` |
 | REQ-PLAT-004 | 平台 | RAG 知识库维护与检索 | knowledge-repo 文档增量同步至 Milvus；稠密+稀疏混合检索；超长 Query 多段融合；静态文件 URL 改写与直链。 | — | 已实现 | [PLAT-RAG-001~014](#plat-rag) | [RAG 机制](../平台/RAG机制/README.md) | `KnowledgeRepoSyncService`, `MilvusService`, `Retriever` |
 | REQ-PLAT-005 | 平台 | RAG Rerank 重排序 | 对检索结果进行 Rerank 排序与过滤，提升 RAG 召回质量。 | P2 | 规划中 | — | [j2agent README 待完善](../../j2agent/README.md) | — |
@@ -186,7 +186,7 @@ flowchart TB
 
 | 需求编号 | 需求名称 | 需求描述 | 状态 | 文档来源 | 代码验证 |
 |----------|----------|----------|------|----------|----------|
-| PLAT-UI-001 | AgentState 状态机 | 8 态：IDLE/THINKING/STREAMING_TEXT/CALLING_TOOL/LOAD_SKILL/COMPLETED/FAILED/CANCELLED | 已实现 | [Agent-UI 交互机制](../平台/agent-ui交互机制/README.md) | `AgentTurnStateMachine` |
+| PLAT-UI-001 | AgentState 状态机 | 9 态：IDLE/AGENT_SCHEDULING/THINKING/STREAMING_TEXT/CALLING_TOOL/LOAD_SKILL/COMPLETED/FAILED/CANCELLED | 已实现 | [Agent-UI 交互机制](../平台/agent-ui交互机制/README.md) | `AgentTurnStateMachine` |
 | PLAT-UI-002 | AgentUiEventEnvelope 协议 | eventId/contextId/turnId/seq/state/transition/phase/eventType/payload/ts | 已实现 | 同上 | `AgentUiEventEnvelope` |
 | PLAT-UI-003 | 单轮单终态收敛 | COMPLETED/FAILED/CANCELLED 三选一 | 已实现 | 同上 | `AgentTurnStateMachine` |
 | PLAT-UI-004 | read_skill → LOAD_SKILL | TOOL 事件 + 独立计数；审计行 kind=skill_load_audit | 已实现 | 同上 | `AgentUiSkillLoadToolInterceptor` |

@@ -53,10 +53,10 @@ flowchart LR
 
 | 场景 | 会话键第三段 | 记忆内容 |
 |------|--------------|----------|
-| 用户在 AI 助手入口对话 | `universal_assistant` | 用户消息、ReAct `tool_calls` / tool result、最终 assistant |
+| 用户在 AI 助手入口对话 | `universal_assistant` | 用户消息、assistant（来自子智能体 bridge 或主 ReAct；编排 Trace 不落库） |
 | 调用子智能体执行专业 Agent | `<targetAgentId>`（如 `j2agent-qa-assistant`） | 提炼 query、专业 Agent 完整 ReAct 与 assistant |
 
-调用子智能体时 `call_sub_agent` 以 `subAgentCallRun=false` 切入专业键，子 Agent 正常读写专业历史；用户之后从「智能体」直进同一 `contextId` + `agentId` 时可续聊调用内容。通用键侧保留工具轨迹，便于在 AI 助手内追问「刚才那个文档问题」。
+编排 Hook 以 `subAgentCallRun=true` 无状态调用子智能体，聊天记录写入 `universal_assistant` 键；委派问答不落入专业 Agent 会话键。
 
 详见 [平台通用助手 — 子智能体调用与记忆](../通用助手/子智能体调用与记忆.md)。
 
