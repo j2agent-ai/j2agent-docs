@@ -95,7 +95,7 @@
 
 | 需求编号 | 模块 | 需求名称 | 需求描述 | 优先级 | 状态 | 详细需求 | 文档来源 | 代码验证 |
 |----------|------|----------|----------|--------|------|----------|----------|----------|
-| REQ-INFRA-001 | 基础设施 | Docker Compose 全栈部署 | MySQL、Redis、etcd、Milvus、j2agent 五服务一键启动；product profile 要求。 | — | 已实现 | [INFRA-001,004~006](#infra) | [Docker 部署](../基础设施/docker部署/README.md) | `docker/docker-compose.yml` |
+| REQ-INFRA-001 | 基础设施 | Docker Compose 全栈部署 | PostgreSQL、Redis、etcd、Milvus、j2agent 五服务一键启动；product profile 要求。 | — | 已实现 | [INFRA-001,004~006](#infra) | [Docker 部署](../基础设施/docker部署/README.md) | `docker/docker-compose.yml` |
 | REQ-INFRA-002 | 基础设施 | 数据卷与离线镜像 | J2AGENT_VOLUMES_PATH 宿主机数据卷布局；package_offline.sh 离线镜像打包。 | — | 已实现 | [INFRA-002,008~009](#infra) | [目录与数据卷](../基础设施/docker部署/目录与数据卷.md), [离线镜像打包](../基础设施/docker部署/离线镜像打包.md) | `docker/` |
 | REQ-INFRA-003 | 基础设施 | 前端静态资源热更新 | ui 卷挂载；rsync 更新前端无需重启容器。 | — | 已实现 | [INFRA-003,007](#infra) | [前端静态资源更新](../基础设施/docker部署/前端静态资源更新.md) | `docker/docker-compose.yml` ui 卷 |
 
@@ -287,11 +287,11 @@ flowchart TB
 
 | 需求编号 | 需求名称 | 需求描述 | 状态 | 文档来源 | 代码验证 |
 |----------|----------|----------|------|----------|----------|
-| INFRA-001 | Docker Compose 全栈 | MySQL、Redis、etcd、Milvus、j2agent 五服务 | 已实现 | [Docker 部署](../基础设施/docker部署/README.md) | `docker/docker-compose.yml` |
+| INFRA-001 | Docker Compose 全栈 | PostgreSQL、Redis、etcd、Milvus、j2agent 五服务 | 已实现 | [Docker 部署](../基础设施/docker部署/README.md) | `docker/docker-compose.yml` |
 | INFRA-002 | 宿主机数据卷布局 | J2AGENT_VOLUMES_PATH/volumes/ 下 ui/logs/knowledge-repo/plugins 等 | 已实现 | [目录与数据卷.md](../基础设施/docker部署/目录与数据卷.md) | `docker/` |
 | INFRA-003 | 前端不打包进镜像 | ui 卷挂载；product profile file: 静态资源 | 已实现 | 同上 | `docker/docker-compose.yml` |
 | INFRA-004 | Maven 打包与镜像构建 | tar.gz 优先 docker/j2agent/ 同级，否则 target/ | 已实现 | [构建与启动.md](../基础设施/docker部署/构建与启动.md) | `docker/Dockerfile` |
-| INFRA-005 | 空库自动初始化 | schemas.sql + I18N 种子 + Flyway 迁移 | 已实现 | 同上 | `SqlBootstrapFlywayConfig` |
+| INFRA-005 | 空库自动初始化 | `sql/schema/postgresql/schemas.sql` + `sql/data/postgresql/${I18N}.sql` + Flyway 迁移；生产环境 `.env` 须配置 `I18N` | 已实现 | 同上 | `SqlBootstrapFlywayConfig` |
 | INFRA-006 | product profile 要求 | SPRING_OPTIONS 须含 --spring.profiles.active=product | 已实现 | 同上 | `docker/.env.example` |
 | INFRA-007 | 前端静态资源热更新 | rsync 到已有 ui 目录；禁止 rm 挂载点；无需重启容器 | 已实现 | [前端静态资源更新.md](../基础设施/docker部署/前端静态资源更新.md) | `docker/docker-compose.yml` |
 | INFRA-008 | 离线镜像打包 | package_offline.sh 导出中间件+基镜像 tar | 已实现 | [离线镜像打包.md](../基础设施/docker部署/离线镜像打包.md) | `docker/package_offline.sh` |
@@ -303,4 +303,5 @@ flowchart TB
 
 | 日期 | 版本 | 变更说明 |
 |------|------|----------|
+| 2026-07-01 | 1.1 | PostgreSQL 迁移文档同步：Flyway/I18N 初始化说明、首次部署 LLM 配置、修正代码路径与 `app_user` 表名 |
 | 2026-06-10 | 1.0 | 初版：从 j2agent-docs 36 篇专题文档与 j2agent 代码反向归纳；主表 24 条、附录 93 条 |
