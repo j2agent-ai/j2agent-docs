@@ -74,7 +74,7 @@ OpenAPI 定义见 `j2agent-model/src/main/resources/openapi-model.yaml`：
 
 ### 3.2 `object_file_reference`
 
-迁移脚本：`sql/migration/mysql/*/V0_2__object_storage_file_management.sql`（含 `object_file_reference`）。
+迁移脚本：`sql/migration/postgresql/*/V0_2__object_storage_file_management.sql`（含 `object_file_reference`）。
 
 | 字段 | 说明 |
 |---|---|

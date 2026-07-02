@@ -14,10 +14,36 @@
 
 ## 1. 数据模型
 
-- 表：`api_provider_config`（Flyway `V0_2__migrate_provider_config.sql` 自旧 `ai_properties` 迁移）。
+- 表：`api_provider_config`，在空库 bootstrap 阶段由 [`sql/schema/postgresql/schemas.sql`](../../../j2agent/j2agent-server/src/main/resources/sql/schema/postgresql/schemas.sql) 创建。
+- Flyway 增量脚本（`sql/migration/postgresql/${I18N}/`）：
+  - `V0_1__agent_global_config.sql` — 插入 `ai_properties.agent-global-config-json`（智能体全局配置模板）
+  - `V0_2__object_storage_file_management.sql` — `object_file` / `object_file_reference` 等对象存储表
+- **种子数据不含 LLM/Embedding 配置**：[`sql/data/postgresql/zh_CN.sql`](../../../j2agent/j2agent-server/src/main/resources/sql/data/postgresql/zh_CN.sql) 仅插入管理员、`api_key_info`、`ai_properties` 等，**不会**预置 `api_provider_config` 行。
 - 每种 `api_type`（`llm` / `embedding`）可有多条配置，**仅一条** `enabled=1` 且 `is_current=1` 为当前生效项。
 - 连接参数在 `config_json`（JSON）；`api_key` 存库，接口返回时脱敏。
 - 修改当前生效项后发布 `ProviderConfigChangedEvent`，由 `AiRuntimeReloadService` 热更新 ChatModel / Embedding 客户端。
+
+### 1.0 首次部署与启动日志
+
+空库首次启动且 Flyway 正常时，日志中应出现：
+
+```text
+Empty database detected, applying SQL bootstrap (locale=zh_CN)
+Successfully validated 2 migrations   # 或 3（含 baseline）
+Current version of schema "public": 0.2
+```
+
+若尚未在管理端配置 LLM/Embedding，启动阶段会出现 **预期内** 的 WARN/ERROR（应用仍会 `Started`）：
+
+```text
+未找到生效中的 LLM 配置（is_current=1 且 enabled=1）
+ChatModel reload 失败：当前 LLM 配置不可用
+未找到生效中的 Embedding 配置
+```
+
+**处理方式**：登录管理端 → **设置 → LLM 接口** / **Embedding 接口**，各添加一条配置并设为「当前」且「启用」。保存后触发热重载，上述告警消失，对话与知识库同步方可使用。
+
+`Flyway upgrade recommended: PostgreSQL 18.x` 仅为版本提示，不影响建表与迁移。
 
 ### 1.1 LLM `config_json` 常用字段
 
