@@ -56,7 +56,7 @@ sequenceDiagram
     Hook->>Main: OrchestrationModelInterceptor 提示直接回答
     Main-->>User: 主模型流式输出
   else 有候选且 invoke
-    Note over Hook: AGENT_SCHEDULING
+    Note over Hook: AGENT_DISPATCHING
     Hook->>Svc: 开放召回
     Hook->>Decide: invoke / complete
     Hook->>Call: agentId + query
@@ -114,7 +114,7 @@ System Prompt：`j2agent/j2agent-server/src/main/resources/prompts/universal-ass
 
 ## 8. 前端轨迹
 
-- 编排阶段展示 **`AGENT_SCHEDULING`（智能体调度器决策中）**（有候选且进入调度循环时）。
+- 编排阶段展示 **`AGENT_DISPATCHING`（智能体调度器决策中）**（有候选且进入调度循环时）。
 - 子智能体调用在轨迹中展示为 **「调用子智能体 {名称}」**（`toolName=call_sub_agent`，Hook 模拟工具事件）。
 - 子 Agent 流式输出经 `SubAgentStreamBridge` 写入父回合 `streamedContent`。
 

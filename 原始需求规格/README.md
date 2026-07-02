@@ -186,7 +186,7 @@ flowchart TB
 
 | 需求编号 | 需求名称 | 需求描述 | 状态 | 文档来源 | 代码验证 |
 |----------|----------|----------|------|----------|----------|
-| PLAT-UI-001 | AgentState 状态机 | 9 态：IDLE/AGENT_SCHEDULING/THINKING/STREAMING_TEXT/CALLING_TOOL/LOAD_SKILL/COMPLETED/FAILED/CANCELLED | 已实现 | [Agent-UI 交互机制](../平台/agent-ui交互机制/README.md) | `AgentTurnStateMachine` |
+| PLAT-UI-001 | AgentState 状态机 | 9 态：IDLE/AGENT_DISPATCHING/THINKING/STREAMING_TEXT/CALLING_TOOL/LOAD_SKILL/COMPLETED/FAILED/CANCELLED | 已实现 | [Agent-UI 交互机制](../平台/agent-ui交互机制/README.md) | `AgentTurnStateMachine` |
 | PLAT-UI-002 | AgentUiEventEnvelope 协议 | eventId/contextId/turnId/seq/state/transition/phase/eventType/payload/ts | 已实现 | 同上 | `AgentUiEventEnvelope` |
 | PLAT-UI-003 | 单轮单终态收敛 | COMPLETED/FAILED/CANCELLED 三选一 | 已实现 | 同上 | `AgentTurnStateMachine` |
 | PLAT-UI-004 | read_skill → LOAD_SKILL | TOOL 事件 + 独立计数；审计行 kind=skill_load_audit | 已实现 | 同上 | `AgentUiSkillLoadToolInterceptor` |
