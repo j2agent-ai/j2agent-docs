@@ -7,7 +7,7 @@
 
 ### 1.1 目的
 
-为 J2Agent 智能体平台建立统一的需求追溯入口，将分散于专题文档与代码中的能力规格汇总为主表（高层）与附录（详细）两层结构，便于评审、验收与后续迭代对照。
+为 j2agent 智能体平台建立统一的需求追溯入口，将分散于专题文档与代码中的能力规格汇总为主表（高层）与附录（详细）两层结构，便于评审、验收与后续迭代对照。
 
 ### 1.2 范围
 
@@ -80,7 +80,7 @@
 | REQ-FE-001 | 前端 | 智能体多任务并行与离开守卫 | chatActivityStore 登记多 agent/context 并行流式任务；全局浮窗跳转；离开/登出守卫与 stopAllActiveTurns。 | — | 已实现 | [FE-TASK-001~005](#fe-task) | [智能体多任务机制](../前端/智能体多任务机制/README.md) | `src/pages/chat/ts/chatActivityStore.ts`, `ChatActivityPanel` |
 | REQ-FE-002 | 前端 | Markdown 气泡与图表懒加载 | markdown-it 同步渲染；mermaid/plantuml/vega-lite 围栏懒加载；流式推迟图表渲染。 | — | 已实现 | [FE-MD-001~007](#fe-md) | [Markdown 解析器](../前端/md解析器/README.md) | `src/pages/chat/ts/markdown/` |
 | REQ-FE-003 | 前端 | Agent 状态机 UI 消费 | useAgentEventDispatcher + agentRendererRegistry + AgentTurnTimeline 消费 WebSocket 事件。 | — | 已实现 | [FE-UI-001~002](#fe-ui) | [Agent-UI 交互机制](../平台/agent-ui交互机制/README.md) §4 | `src/pages/chat/ts/agent/` |
-| REQ-FE-004 | 前端 | 热门问题 / 建议追问 UI | 空会话展示热门问题；COMPLETED 后展示建议追问；不写入 MessageDto 气泡。 | — | 已实现 | [FE-UI-003](#fe-ui), [PLAT-UI-006~008](#plat-ui) | [Agent-UI 交互机制](../平台/agent-ui交互机制/README.md) | `src/pages/chat/ts/` 热门问题/追问组件 |
+| REQ-FE-004 | 前端 | 热门问题 UI | 空会话展示热门问题；不写入 MessageDto 气泡。 | — | 已实现 | [FE-UI-003](#fe-ui), [PLAT-UI-008](#plat-ui) | [Agent-UI 交互机制](../平台/agent-ui交互机制/README.md) | `src/pages/chat/ts/` 热门问题组件 |
 
 ### 2.3 Agent 开发
 
@@ -96,7 +96,7 @@
 | 需求编号 | 模块 | 需求名称 | 需求描述 | 优先级 | 状态 | 详细需求 | 文档来源 | 代码验证 |
 |----------|------|----------|----------|--------|------|----------|----------|----------|
 | REQ-INFRA-001 | 基础设施 | Docker Compose 全栈部署 | PostgreSQL、Redis、etcd、Milvus、j2agent 五服务一键启动；product profile 要求。 | — | 已实现 | [INFRA-001,004~006](#infra) | [Docker 部署](../基础设施/docker部署/README.md) | `docker/docker-compose.yml` |
-| REQ-INFRA-002 | 基础设施 | 数据卷与离线镜像 | J2AGENT_VOLUMES_PATH 宿主机数据卷布局；package_offline.sh 离线镜像打包。 | — | 已实现 | [INFRA-002,008~009](#infra) | [目录与数据卷](../基础设施/docker部署/目录与数据卷.md), [离线镜像打包](../基础设施/docker部署/离线镜像打包.md) | `docker/` |
+| REQ-INFRA-002 | 基础设施 | 数据卷与离线镜像 | AI_CENTER_BASE_PATH 宿主机数据卷布局；package_offline.sh 离线镜像打包。 | — | 已实现 | [INFRA-002,008~009](#infra) | [目录与数据卷](../基础设施/docker部署/目录与数据卷.md), [离线镜像打包](../基础设施/docker部署/离线镜像打包.md) | `docker/` |
 | REQ-INFRA-003 | 基础设施 | 前端静态资源热更新 | ui 卷挂载；rsync 更新前端无需重启容器。 | — | 已实现 | [INFRA-003,007](#infra) | [前端静态资源更新](../基础设施/docker部署/前端静态资源更新.md) | `docker/docker-compose.yml` ui 卷 |
 
 ---
@@ -120,7 +120,7 @@ flowchart TB
   platRAG --> codeRAG[KnowledgeRepoSyncService MilvusService]
   platPLUGIN --> codeAgent[AiAgent AgentRouter ChatService]
   platUI --> codeUI[AgentTurnStateMachine]
-  fe --> codeFE[j2agent-ui src/pages/chat/ts]
+  fe --> codeFE[j2agent-web src/pages/chat/ts]
 ```
 
 ---
@@ -191,7 +191,6 @@ flowchart TB
 | PLAT-UI-003 | 单轮单终态收敛 | COMPLETED/FAILED/CANCELLED 三选一 | 已实现 | 同上 | `AgentTurnStateMachine` |
 | PLAT-UI-004 | read_skill → LOAD_SKILL | TOOL 事件 + 独立计数；审计行 kind=skill_load_audit | 已实现 | 同上 | `AgentUiSkillLoadToolInterceptor` |
 | PLAT-UI-005 | turn_trace 回合轨迹 | 终态写入隐藏 assistant 行；历史回填 MessageDto.turnSteps | 已实现 | 同上 | `ChatService` |
-| PLAT-UI-006 | 建议追问 NOTICE | COMPLETED 后可选 3–5 条 suggested-follow-ups | 已实现 | 同上 | `FollowUpSuggestionService` |
 | PLAT-UI-007 | 整轮 FAILED 事件 | providerError/unsupportedAgent 等；下发后关闭 WebSocket | 已实现 | 同上 | `ChatService` |
 | PLAT-UI-008 | 热门问题 qa-template | Agent 开关 showHotQuestions；GET /qa-template 随机抽取 | 已实现 | 同上 | `QaTemplateController` |
 | PLAT-UI-009 | reasoningContent 双通道 | answerDelta 触发 STREAMING_TEXT；reasoningDelta 保持 THINKING | 已实现 | 同上 | `ThinkingStreamSplitter` |
@@ -202,7 +201,7 @@ flowchart TB
 | 需求编号 | 需求名称 | 需求描述 | 状态 | 文档来源 | 代码验证 |
 |----------|----------|----------|------|----------|----------|
 | PLAT-PLUGIN-001 | 插件 JAR 动态加载 | tar.gz 解压到 plugin.path；AgentPluginRegistry 扫描 Spring 组件；支持热重载 | 已实现 | [插件 Agent 接入与界面](../平台/插件Agent接入与界面/README.md) | `AgentPluginRegistry`, `AgentPluginInstallService` |
-| PLAT-PLUGIN-002 | AgentRouter 路由 | List&lt;AiAgent&gt; 聚合；route(agentId)；assistant/chat_assistant→mcp_assistant 别名 | 已实现 | 同上 | `AgentRouter` |
+| PLAT-PLUGIN-002 | AgentRouter 路由 | List&lt;AiAgent&gt; 聚合；route(agentId)；assistant→chat_assistant 别名 | 已实现 | 同上 | `AgentRouter` |
 | PLAT-PLUGIN-003 | GET /agents 列表 | 返回 agentId/name/description/showHotQuestions；按 agentId 字典序 | 已实现 | 同上 | `ChatController` |
 | PLAT-PLUGIN-004 | WebSocket 对话通道 | /ws/rest/j2agent/chat?context-id=&agent-id= | 已实现 | 同上 | `ChatController` |
 | PLAT-PLUGIN-005 | MCP 刷新 Agent 重建 | McpToolCallbacksRefreshedEvent → 全部 AiAgent rebuildAgent() | 已实现 | 同上 | `McpToolCallbacksRefreshedListener` |
@@ -219,7 +218,7 @@ flowchart TB
 | PLAT-FILE-005 | 删除引用保护 | object_file_reference 存在时 409；删除补偿延迟队列 | 已实现 | 同上 | `ObjectDeleteReconcileWorker` |
 | PLAT-FILE-006 | OSS-DB 差异检查 | 管理员手动触发；OSS_ONLY/DB_ONLY/METADATA_MISMATCH/IN_PROGRESS | 已实现 | 同上 | `ObjectStorageSyncService` |
 | PLAT-FILE-007 | 差异人工处置 | REGISTER_DB/DELETE_OSS/DELETE_DB/UPDATE_DB/DELETE_BOTH；STALE 重扫 | 已实现 | 同上 | `ObjectStorageSyncService` |
-| PLAT-FILE-008 | 签名 URL 预览下载 | 15 分钟有效期；proxy/direct 访问模式（`access-mode` / `J2AGENT_STORAGE_ACCESS_MODE`） | 已实现 | 同上 | `ObjectStorageService` |
+| PLAT-FILE-008 | 签名 URL 预览下载 | 15 分钟有效期；proxy/direct 访问模式（`access-mode` / `AI_CENTER_STORAGE_ACCESS_MODE`） | 已实现 | 同上 | `ObjectStorageService` |
 
 ### 4.8 平台 — 聊天图片附件 {#plat-img}
 
@@ -227,7 +226,7 @@ flowchart TB
 |----------|----------|----------|------|----------|----------|
 | PLAT-IMG-001 | 对话图片上传限制 | 单消息最多 4 张；前端转 JPEG 最长边 2048px；服务端 JPEG/PNG/WebP ≤10MB | 已实现 | [聊天图片附件](../平台/聊天图片附件/README.md) | `ChatAttachmentService` |
 | PLAT-IMG-002 | 对象键规则 | chat/{userId}/{contextId}/{UUIDv7}_{文件名}；发送时服务端上传 | 已实现 | 同上 | `ChatAttachmentService` |
-| PLAT-IMG-003 | 访问模式 proxy/direct | `j2agent.storage.access-mode`（`J2AGENT_STORAGE_ACCESS_MODE`）；proxy 经应用转发；direct 预签名直链；失败降级 proxy | 已实现 | 同上 | `ChatAttachmentUrlResolver` |
+| PLAT-IMG-003 | 访问模式 proxy/direct | `com.nms.ai.storage.access-mode`（`AI_CENTER_STORAGE_ACCESS_MODE`）；proxy 经应用转发；direct 预签名直链；失败降级 proxy | 已实现 | 同上 | `ChatAttachmentUrlResolver` |
 | PLAT-IMG-004 | WebSocket attachments | Base64 data 发送；持久化仅存 objectKey；LLM 从 OSS 读字节 | 已实现 | 同上 | `ChatController`, `ChatAttachmentService` |
 | PLAT-IMG-005 | 删除会话 OSS 清理 | deleteByConversationId 清引用与孤儿文件；整 context 删除前缀清扫 | 已实现 | 同上 | `ChatContextService` |
 
@@ -259,7 +258,7 @@ flowchart TB
 |----------|----------|----------|------|----------|----------|
 | FE-UI-001 | Agent 状态机 UI 消费 | useAgentEventDispatcher + agentRendererRegistry + AgentTurnTimeline | 已实现 | [Agent-UI 交互机制](../平台/agent-ui交互机制/README.md) §4 | `src/pages/chat/ts/agent/` |
 | FE-UI-002 | AgentThinkingBlock | reasoningContent 半折叠、流式滚底 | 已实现 | 同上 | `src/pages/chat/ts/agent/` |
-| FE-UI-003 | 热门问题/建议追问 UI | 空会话热门问题；输入框上方建议追问；不写入 MessageDto 气泡 | 已实现 | 同上 | `src/pages/chat/ts/` |
+| FE-UI-003 | 热门问题 UI | 空会话热门问题；不写入 MessageDto 气泡 | 已实现 | 同上 | `src/pages/chat/ts/` |
 
 ### 4.12 Agent 开发 {#agent-dev}
 
@@ -288,7 +287,7 @@ flowchart TB
 | 需求编号 | 需求名称 | 需求描述 | 状态 | 文档来源 | 代码验证 |
 |----------|----------|----------|------|----------|----------|
 | INFRA-001 | Docker Compose 全栈 | PostgreSQL、Redis、etcd、Milvus、j2agent 五服务 | 已实现 | [Docker 部署](../基础设施/docker部署/README.md) | `docker/docker-compose.yml` |
-| INFRA-002 | 宿主机数据卷布局 | J2AGENT_VOLUMES_PATH/volumes/ 下 ui/logs/knowledge-repo/plugins 等 | 已实现 | [目录与数据卷.md](../基础设施/docker部署/目录与数据卷.md) | `docker/` |
+| INFRA-002 | 宿主机数据卷布局 | AI_CENTER_BASE_PATH/volumes/ 下 ui/logs/knowledge-repo/plugins 等 | 已实现 | [目录与数据卷.md](../基础设施/docker部署/目录与数据卷.md) | `docker/` |
 | INFRA-003 | 前端不打包进镜像 | ui 卷挂载；product profile file: 静态资源 | 已实现 | 同上 | `docker/docker-compose.yml` |
 | INFRA-004 | Maven 打包与镜像构建 | tar.gz 优先 docker/j2agent/ 同级，否则 target/ | 已实现 | [构建与启动.md](../基础设施/docker部署/构建与启动.md) | `docker/Dockerfile` |
 | INFRA-005 | 空库自动初始化 | `sql/schema/postgresql/schemas.sql` + `sql/data/postgresql/${I18N}.sql` + Flyway 迁移；生产环境 `.env` 须配置 `I18N` | 已实现 | 同上 | `SqlBootstrapFlywayConfig` |
