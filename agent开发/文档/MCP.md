@@ -134,19 +134,28 @@ server 名称与 `mcp-config-json` → `mcpServers` 的键名一致。
 
 与 `ExternalSkills` 的对称关系见 [Agent开发.md §1.4](Agent开发.md#14-特性接口对比externalskills--mcpfeature)。
 
-### 4.3 业务示例
+### 4.3 接入示例
 
-本仓库 [`mcp-assistant`](../../j2agent-plugins-agents/agents/mcp-assistant/) 的 `McpAssistantAgent`：
+任意插件 Agent 实现 `McpFeature` 即可合并 MCP 工具；若只需部分 Server，关闭全量并声明名称：
 
 ```java
 @Component
-public class McpAssistantAgent extends AiAgent implements McpFeature {
+public class YourAgent extends AiAgent implements McpFeature {
 
     @Override
     protected Object[] buildTools() {
         return new Object[] { mathTool };
     }
-    // useAllMcpServers() 默认 true，无需 override
+
+    @Override
+    public boolean useAllMcpServers() {
+        return false;
+    }
+
+    @Override
+    public Set<String> useMcpServers() {
+        return Set.of("your-mcp-server-key"); // 对应 mcp-config-json → mcpServers 的键名
+    }
 }
 ```
 

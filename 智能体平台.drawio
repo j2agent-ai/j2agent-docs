@@ -64,7 +64,7 @@
         <mxCell id="pl_title" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=17;fontStyle=1;fontColor=#274e13;" value="j2agent-plugins-agents（业务 Agent 扩展）" vertex="1">
           <mxGeometry height="32" width="600" x="315" y="102" as="geometry" />
         </mxCell>
-        <mxCell id="pl3" parent="1" style="rounded=1;whiteSpace=wrap;html=1;strokeWidth=2;fillColor=#d5e8d4;strokeColor=#38761d;" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;@Component&lt;br&gt;&lt;b&gt;extends AiAgent&lt;br&gt;&lt;/b&gt;继承基类实现的业务 Agent&lt;br&gt;例：AssistantReactAgent、IntelligentReportAgent&lt;/font&gt;" vertex="1">
+        <mxCell id="pl3" parent="1" style="rounded=1;whiteSpace=wrap;html=1;strokeWidth=2;fillColor=#d5e8d4;strokeColor=#38761d;" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;@Component&lt;br&gt;&lt;b&gt;extends AiAgent&lt;br&gt;&lt;/b&gt;继承基类实现的业务 Agent&lt;br&gt;例：业务插件 YourAgent&lt;/font&gt;" vertex="1">
           <mxGeometry height="108" width="360" x="825" y="150" as="geometry" />
         </mxCell>
         <mxCell id="g5" parent="1" style="rounded=1;whiteSpace=wrap;html=1;strokeWidth=2;fillColor=#fad7ac;strokeColor=#b46504;" value="&lt;font style=&quot;font-size: 20px;&quot;&gt;ChatService&lt;/font&gt;&lt;div style=&quot;font-size:12px;color:#555;&quot;&gt;编排单轮 handleChat / stream&lt;/div&gt;" vertex="1">
@@ -398,7 +398,7 @@
         <mxCell id="AY7p5vYeo7-wPCht4pOt-22" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=17;fontStyle=1;fontColor=#274e13;" value="j2agent-plugins-agents（业务 Agent 扩展）" vertex="1">
           <mxGeometry height="32" width="600" x="565" y="942" as="geometry" />
         </mxCell>
-        <mxCell id="AY7p5vYeo7-wPCht4pOt-23" parent="1" style="rounded=1;whiteSpace=wrap;html=1;strokeWidth=2;fillColor=#d5e8d4;strokeColor=#38761d;" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;@Component&lt;br&gt;&lt;b&gt;extends AiAgent&lt;br&gt;&lt;/b&gt;继承基类实现的业务 Agent&lt;br&gt;例：AssistantReactAgent、IntelligentReportAgent&lt;/font&gt;" vertex="1">
+        <mxCell id="AY7p5vYeo7-wPCht4pOt-23" parent="1" style="rounded=1;whiteSpace=wrap;html=1;strokeWidth=2;fillColor=#d5e8d4;strokeColor=#38761d;" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;@Component&lt;br&gt;&lt;b&gt;extends AiAgent&lt;br&gt;&lt;/b&gt;继承基类实现的业务 Agent&lt;br&gt;例：业务插件 YourAgent&lt;/font&gt;" vertex="1">
           <mxGeometry height="108" width="360" x="1075" y="990" as="geometry" />
         </mxCell>
         <mxCell id="AY7p5vYeo7-wPCht4pOt-24" parent="1" style="rounded=1;whiteSpace=wrap;html=1;strokeWidth=2;fillColor=#fad7ac;strokeColor=#b46504;" value="&lt;font style=&quot;font-size: 20px;&quot;&gt;ChatService&lt;/font&gt;&lt;div style=&quot;font-size:12px;color:#555;&quot;&gt;编排单轮 handleChat / stream&lt;/div&gt;" vertex="1">
