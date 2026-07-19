@@ -175,7 +175,7 @@ flowchart TB
 
 | 需求编号 | 需求名称 | 需求描述 | 状态 | 文档来源 | 代码验证 |
 |----------|----------|----------|------|----------|----------|
-| PLAT-CHAT-001 | conversationId 复合键 | 格式 userId:contextId:agentId；兼容两段老格式 | 已实现 | [Agent 记忆机制](../平台/agent记忆机制/README.md) / [对话记忆](../平台/agent记忆机制/对话记忆.md) | `CompositeKeyChatMemoryRepository` |
+| PLAT-CHAT-001 | conversationId 复合键 | 格式 userId:contextId:agentId（三段且 agentId 非空） | 已实现 | [Agent 记忆机制](../平台/agent记忆机制/README.md) / [对话记忆](../平台/agent记忆机制/对话记忆.md) | `CompositeKeyChatMemoryRepository` |
 | PLAT-CHAT-002 | Append-only 窗口记忆 | 运行时窗口 100 条；持久化 Redis+JDBC 全量；add 仅 delta | 已实现 | 同上 | `RedissonCachingChatMemoryRepository` |
 | PLAT-CHAT-003 | ReAct 兼容记忆 Advisor | 无 AssistantMessage 时 prepend 历史；工具循环后续跳不重复 prepend | 已实现 | 同上 | `ReactCompatibleMessageChatMemoryAdvisor` |
 | PLAT-CHAT-004 | 历史 REST API | getHistory 必填 agent-id；delete 可选 agent-id；clear-all 跳过运行中会话 | 已实现 | 同上 | `ChatController`, `ChatContextService` |
