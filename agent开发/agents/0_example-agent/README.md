@@ -9,7 +9,7 @@
 3. 重命名 `ExampleAgent.java` 或改类名，并修改：
    - `getAgentId()` — **全局唯一**，与 WebSocket `agent-id` 一致
    - `getAgentName()` / `getAgentDescription()`
-   - `getDispatchPrompt()`（可选，调度提示词：能力域 + 典型问法，不展示到界面）
+   - `getOrchestrationPrompt()`（可选，编排提示词：能力域 + 典型问法，不展示到界面）
 4. 编辑 `src/main/resources/system-prompt.md`
 5. 若放入本仓库 `agents/`，在 [`../pom.xml`](../pom.xml) 的 `<modules>` 中追加模块名
 
