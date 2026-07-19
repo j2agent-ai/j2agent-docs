@@ -40,10 +40,10 @@ flowchart LR
 
 ## 会话键
 
-- **格式**：`userId:contextId:agentId`（`ConversationIdCodec` 编解码）。
+- **格式**：`userId:contextId:agentId`（`ConversationIdCodec` 编解码，必须三段且 `agentId` 非空）。
 - **构造**：`ChatService` 在 `AgentRouter.route` 后取 `aiAgent.getAgentId()`，调用 `ConversationIdCodec.format`。
 - **库表**：`chat_context_record` 主键 `(context_id, agent_id)`；`chat_context_item` 按 `context_id + agent_id` 过滤。
-- **兼容**：两段老键 `userId:contextId` 第三段按空串解析；`userId` 为空时用 `anonymous`。
+- **`userId` 为空**：格式化为 `anonymous`。
 
 记忆读写、Redis key、按 `agentId` 隔离详见 [对话记忆 §8](对话记忆.md#8-会话隔离conversationid)。
 
@@ -98,7 +98,7 @@ WebSocket 一轮从首条用户消息到 `COMPLETED` / `FAILED` / `CANCELLED`，
 ### 索引维度
 
 - **粒度**：`contextId + agentId`（对齐库表主键，**不是**仅 `contextId`）。
-- **`agentId` 归一化**：`null` → `ConversationIdCodec.LEGACY_AGENT_ID`（空串）。
+- **`agentId`**：必填非空。
 - **登记时机**：`ChatService` 在 `route` 得到 resolved `agentId` 后 `register`；提前失败路径不登记。
 
 ### Redis 结构
