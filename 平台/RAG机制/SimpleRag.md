@@ -76,10 +76,12 @@ flowchart LR
 - 每个 collection 在数据库表 `simple_rag_collection_state` 中记录 `collection_name`、`owner_agent_id`、`sync_status`、`document_count`、`error_message`、`created_at`、`updated_at`。
 - `sync_status = COMPLETED` 时直接跳过，不读取 Markdown、不调用 Embedding、不重建 Milvus collection。
 - 记录缺失、`IN_PROGRESS` 或 `FAILED` 时视为未完成：先写入 `IN_PROGRESS`，再清空并重建 collection；成功后写 `COMPLETED`，失败后写 `FAILED` 与错误原因。
+- **替换已存在插件**（`replace=true`）时，会对该包内 `agentId` 所属的 SimpleRag 执行失效：drop 对应 Milvus collection 并删除状态记录，随后 reload 同步会走重建路径；其它 Agent 的 COMPLETED 状态不受影响。普通启动仍按 COMPLETED 跳过。
+- **单插件重载**与**全局重新加载插件**均可勾选「重建向量内容」：勾选后先失效对应 `agentId` 的 SimpleRag 再同步重建（单插件仅该包，全局为全部已加载 Agent）；未勾选时按 `COMPLETED` 跳过。
 - 已不存在的 SimpleRag collection 会按 `simple_rag_` 前缀识别并删除，同时删除对应状态记录，避免插件移除后残留旧数据。
 - Agent 移除时删除对应 SimpleRag collection 和状态记录。
 
-状态表只表达 collection 是否完整，不感知同名资源内容是否变化。因此同一个 `ragStoreName()` 对应的 Markdown 内容变更后，如果状态仍是 `COMPLETED`，启动或 reload 不会自动重新嵌入；需要手动清理该 collection 状态或将状态改为非完成后再触发同步。这个设计是为了让 SimpleRag 保持轻量，避免退化成 knowledge-repo 的逐文件同步模型。
+状态表只表达 collection 是否完整，不感知同名资源内容是否变化。因此同一个 `ragStoreName()` 对应的 Markdown 内容变更后，如果状态仍是 `COMPLETED`，普通启动或未勾选重建的手动 reload 不会自动重新嵌入。通过「替换插件」安装更新包，或重载时勾选重建向量，会失效并重建对应 Agent 的 SimpleRag；其它情况需要手动清理该 collection 状态或将状态改为非完成后再触发同步。这个设计是为了让 SimpleRag 保持轻量，避免退化成 knowledge-repo 的逐文件同步模型。
 
 参考建表：
 
