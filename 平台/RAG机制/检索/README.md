@@ -1,6 +1,6 @@
 # 检索
 
-本模块描述 RAG **查询侧**：向量化、混合检索、超长 query 融合，以及知识库维护期间的检索降级。
+本模块描述 RAG **查询侧**：向量化、混合检索、超长 query 融合，以及知识库维护期间的检索降级。知识库检索和 SimpleRag 检索都复用 `VectorDatabaseService.hybridRetrieval`，但入口服务分开。
 
 ## 文档
 
@@ -8,6 +8,7 @@
 |------|------|
 | [Query 预处理](Query预处理.md) | Advanced RAG：Multimodal / Compression / Rewrite 链 |
 | [融合检索](融合检索.md) | Milvus 稠密+稀疏混合检索、QueryChunker 多段融合、配置与验证 |
+| [SimpleRag](../SimpleRag.md) | Agent 随附 Markdown 资料的检索入口与生命周期 |
 
 ## 代码入口
 
@@ -17,10 +18,12 @@
 | Query 预处理 | `.../rag/query/DefaultQueryTransformers.java`、`MultimodalQueryTransformer.java` |
 | 查询切分 | `.../service/rag/retrieval/QueryChunker.java` |
 | Milvus 混合检索 | `.../service/rag/vdb/milvus/MilvusService.java` |
-| 对话 RAG | `.../rag/AbstractCollectionKbRetriever.java` |
+| 对话 RAG | `.../service/rag/inf/AbstractCollectionKbRetriever.java` |
+| SimpleRag | `.../service/rag/inf/AbstractSimpleRagRetriever.java`、`.../service/rag/SimpleRagStoreSyncService.java` |
 
 ## 与知识库维护的关系
 
 - 入库、增量同步、完全重建见 [知识库维护](../知识库维护/README.md)。
+- Agent 随附 Markdown 资料的入库、刷新与清理见 [SimpleRag](../SimpleRag.md)。
 - `KnowledgeRepoMaintenanceCoordinator.isExclusiveSyncActive()` 为 true 时，检索返回降级/空结果，避免用新维度 query vector 查询旧 collection schema。
 - Milvus 检索前会校验 query 向量维度与 `lastDimension`、collection schema 一致。

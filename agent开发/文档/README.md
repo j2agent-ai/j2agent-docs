@@ -7,7 +7,7 @@
 | 文档 | 说明 |
 |------|------|
 | [Agent开发.md](Agent开发.md) | `AiAgent` 契约、生命周期、插件约束、热重载（插件仓库） |
-| [工具.md](工具.md) | `@Tool` 编写、平台内置工具、`buildTools()` |
+| [工具.md](工具.md) | `@Tool` 编写、注册机制、`buildTools()` |
 | [Skill.md](Skill.md) | `skills/` 内部默认加载；外部需 `implements ExternalSkills`；与 `McpFeature` 对称说明见 Agent开发 §1.4 |
 | [MCP.md](MCP.md) | MCP 配置、`implements McpFeature` 声明式接入、刷新与排错 |
 | [可选能力.md](可选能力.md) | RAG、热门问题、深度思考、自定义拦截器 |

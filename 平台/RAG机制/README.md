@@ -1,6 +1,6 @@
 # RAG 机制
 
-本文档目录描述智能体平台的 **检索增强生成（RAG）** 全链路，按 **检索** 与 **知识库维护** 两大模块组织。
+本文档目录描述智能体平台的 **检索增强生成（RAG）** 全链路，按 **检索**、**知识库维护** 与 **SimpleRag** 组织。
 
 ## 总体架构
 
@@ -10,29 +10,42 @@ flowchart TB
         Repo[knowledge-repo 文档]
         Coord[MaintenanceCoordinator]
         RedisLock[Redis 维护锁]
-        Parser[MarkdownQaParser 分片]
+        Parser[KnowledgeTextChunkParser 分片]
         EmbedIn[EmbeddingService 向量化]
         MilvusWrite[Milvus 写入]
         Repo --> Coord --> RedisLock --> Parser --> EmbedIn --> MilvusWrite
     end
+    subgraph simplerag [SimpleRag - Agent 随附资料]
+        AgentMd[Agent classpath Markdown]
+        SimpleRetriever[AbstractSimpleRagRetriever]
+        SimpleSync[SimpleRagStoreSyncService]
+        SimpleParser[KnowledgeTextChunkParser parse]
+        SimpleEmbed[EmbeddingService 向量化]
+        SimpleWrite["VectorDatabaseService 写入 simple_rag_*"]
+        AgentMd --> SimpleRetriever --> SimpleSync --> SimpleParser --> SimpleEmbed --> SimpleWrite
+    end
     subgraph store [Milvus Collection]
         Dense[embedding 稠密向量]
         Sparse[sparse BM25]
-        Meta[text question answer 元数据]
+        Meta[text heading_path 内部元数据]
     end
     MilvusWrite --> store
+    SimpleWrite --> store
     subgraph query [检索 - 查询]
         UserQ["用户输入 text + media"]
         QT[QueryTransformer 链]
         Chunker[QueryChunker 超长切分]
         EmbedQ[EmbeddingService]
-        Hybrid[MilvusService.hybridRetrieval]
+        Hybrid[VectorDatabaseService.hybridRetrieval]
         Fuse[Retriever 多段融合]
         Agent[AbstractCollectionKbRetriever]
+        SimpleRetrieve[AbstractSimpleRagRetriever.retrieve]
         UserQ --> QT --> Chunker --> EmbedQ --> Hybrid --> Fuse --> Agent
+        UserQ --> SimpleRetrieve --> EmbedQ --> Hybrid
     end
     store --> Hybrid
     Agent --> LLM[Agent ChatClient + RAG Advisor]
+    SimpleRetrieve --> LLM
     Coord -. exclusive 门禁 .-> Fuse
 ```
 
@@ -45,6 +58,7 @@ flowchart TB
 | [检索模块 README](检索/README.md) | 查询侧入口与代码速查 |
 | [Query 预处理](检索/Query预处理.md) | Multimodal / Compression / Rewrite QueryTransformer 链 |
 | [融合检索](检索/融合检索.md) | 稠密 + 稀疏混合检索、超长 query 多向量融合、维护降级、查询维度校验 |
+| [SimpleRag](SimpleRag.md) | Agent 随附 Markdown 资料的自动入库、刷新、检索与清理 |
 
 ### 知识库维护
 
@@ -65,8 +79,12 @@ flowchart TB
 | Query 预处理 | `.../rag/query/DefaultQueryTransformers.java`、`MultimodalQueryTransformer.java` |
 | RAG skip Advisor | `.../service/llm/advisor/EmptyQuerySkippingRetrievalAugmentationAdvisor.java` |
 | Milvus 混合检索 | `.../service/rag/vdb/milvus/MilvusService.java` |
+| 向量库抽象 | `.../service/rag/vdb/VectorDatabaseService.java` |
 | 知识库同步逻辑 | `.../service/rag/knowledge/repo/KnowledgeRepoSyncService.java` |
 | 向量写入 | `.../service/rag/knowledge/MilvusKnowledgeWriteService.java` |
+| Markdown 切片 | `.../service/rag/knowledge/repo/KnowledgeTextChunkParser.java` |
+| SimpleRag 抽象 | `.../service/rag/inf/AbstractSimpleRagRetriever.java` |
+| SimpleRag 同步与检索 | `.../service/rag/SimpleRagStoreSyncService.java` |
 
 ## 相关配置
 
