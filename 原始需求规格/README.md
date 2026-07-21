@@ -212,7 +212,7 @@ flowchart TB
 | 需求编号 | 需求名称 | 需求描述 | 状态 | 文档来源 | 代码验证 |
 |----------|----------|----------|------|----------|----------|
 | PLAT-FILE-001 | ADMIN 文件管理页 | 路由 /#/files；虚拟目录、面包屑、搜索、状态筛选、分页 | 已实现 | [文件管理与对象存储](../平台/文件管理与对象存储/README.md) | `FileManagementController` |
-| PLAT-FILE-002 | 多对象存储供应商 | MinIO/OSS/七牛/R2；j2agent.storage.enabled 开关 | 已实现 | 同上 | `ObjectStorageService` 及各 Provider |
+| PLAT-FILE-002 | 多对象存储供应商 | S3/阿里云 OSS/七牛；j2agent.storage.enabled 开关 | 已实现 | 同上 | `ObjectStorageService` 及各 Provider |
 | PLAT-FILE-003 | 浏览器直传上传 | init→PUT OSS→complete；幂等 complete；abort 清理 | 已实现 | 同上 | `ObjectFileManagementService` |
 | PLAT-FILE-004 | 上传后台对账 | Redisson 延迟队列；默认 10 次×30s；heartbeat 暂停 attempt 计数 | 已实现 | 同上 | `ObjectUploadReconcileWorker` |
 | PLAT-FILE-005 | 删除引用保护 | object_file_reference 存在时 409；删除补偿延迟队列 | 已实现 | 同上 | `ObjectDeleteReconcileWorker` |
