@@ -52,7 +52,7 @@ J2AGENT_S3_ENDPOINT=http://192.168.3.4:19000
 **注意**：
 
 - 预签名 URL 的 host 由 `s3.endpoint` 决定；**不可**在前端把 URL 中的 host 改成别的地址（会破坏 SigV4 签名 → `SignatureDoesNotMatch`）。
-- Docker 内服务端常用 `http://rustfs:9000` 访问 RustFS，浏览器无法解析该 host，此类环境应使用 **proxy**（默认），不要指望 direct。
+- Docker 内服务端常用 `http://rustfs:9000` 访问 S3 后端，浏览器无法解析该 host，此类环境应使用 **proxy**（默认），不要指望 direct。
 - direct 模式下若 OSS 直链仍失败，前端会自动降级为 content 代理（聊天 `/chat/files/content`，文件管理 `/files/content`）。
 
 ## 3. 数据模型
@@ -208,7 +208,7 @@ sequenceDiagram
 
 ### 9.4 历史图片无法显示 / SignatureDoesNotMatch
 
-- **proxy 模式（默认）**：聊天走 `/chat/files/content?objectKey=...`，文件管理预览走 `/files/content?object-key=...`，只需应用服务器可达，不依赖 RustFS / MinIO 预签名。
+- **proxy 模式（默认）**：聊天走 `/chat/files/content?objectKey=...`，文件管理预览走 `/files/content?object-key=...`，只需应用服务器可达，不依赖 S3 后端预签名。
 - **direct 模式**：预签名 host 来自 `s3.endpoint`，该地址须对浏览器可达（勿使用 `127.0.0.1`、`rustfs:9000`、`minio:9000` 等仅服务端可访问的 endpoint）；**禁止**在前端改写预签名 URL 的 host（会导致 `SignatureDoesNotMatch`）。
 - DIRECT 模式 OSS 加载失败时，前端会自动降级为 content 代理。
 - 对象已被误删则无法恢复展示。
