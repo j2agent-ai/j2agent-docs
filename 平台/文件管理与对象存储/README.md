@@ -9,7 +9,7 @@
 - 支持虚拟目录、面包屑导航、名称搜索、状态筛选和分页。
 - 支持单个或批量上传、短期签名 URL 预览/下载、单个删除和批量删除。
 - 支持浏览器直传对象存储（带上传进度），以及经后端中转上传（兼容保留）。
-- 支持 MinIO、阿里云 OSS、七牛云 Kodo 和 Cloudflare R2。
+- 支持 RustFS、MinIO、阿里云 OSS、七牛云 Kodo 和 Cloudflare R2。
 - 差异检查和处置均由管理员手动触发，不包含定时检查和云事件通知。
 - 数据库仅保存对象元数据，不保存文件正文。
 
@@ -35,8 +35,8 @@ j2agent/j2agent-starter/src/main/resources/application-product.yaml
 j2agent:
   storage:
     enabled: true
-    # minio、oss、qiniu、r2
-    type: minio
+    # rustfs、minio、oss、qiniu、r2
+    type: rustfs
     bucket: j2agent-files
     # 访问方式：proxy=同源 content 代理（默认）；direct=OSS 预签名直链
     access-mode: proxy
@@ -47,25 +47,26 @@ j2agent:
 
 `enabled=false` 时不会创建对象存储服务和文件管理 REST Controller，前端调用文件接口会返回 404。
 
-本地开发配置默认启用 MinIO。MinIO 适配器首次访问默认 Bucket 时会检查 Bucket 是否存在，不存在则自动创建。阿里云 OSS、七牛云 Kodo 和 Cloudflare R2 的 Bucket 仍需提前创建。
+本地开发配置默认启用 RustFS。RustFS / MinIO 适配器首次访问默认 Bucket 时会检查 Bucket 是否存在，不存在则自动创建。阿里云 OSS、七牛云 Kodo 和 Cloudflare R2 的 Bucket 仍需提前创建。
 
-### 2.1 S3 兼容存储（MinIO / R2 / RustFS）
+### 2.1 S3 兼容存储（RustFS / MinIO / R2）
 
-`type` 设为 `minio` 或 `r2` 时，连接参数统一使用 `s3` 段（与供应商实现无关的中性命名）：
+`type` 设为 `rustfs`、`minio` 或 `r2` 时，连接参数统一使用 `s3` 段（与供应商实现无关的中性命名）：
 
 ```yaml
 j2agent:
   storage:
     enabled: true
-    type: minio   # 或 r2
+    type: rustfs   # 或 minio、r2
     bucket: j2agent-files
     s3:
       endpoint: http://127.0.0.1:19000
-      access-key-id: minioadmin
+      access-key-id: rustfsadmin
       secret-access-key: change-me
 ```
 
-- `type: minio`：首次访问默认 Bucket 时会自动创建（适合本地 MinIO、RustFS 等自建部署）
+- `type: rustfs`：默认本地对象存储，首次访问默认 Bucket 时会自动创建
+- `type: minio`：历史兼容配置，仍使用 S3 兼容实现并自动建桶
 - `type: r2`：Bucket 需提前在 Cloudflare 控制台创建
 
 ### 2.2 阿里云 OSS
@@ -118,11 +119,11 @@ j2agent:
 
 ```dotenv
 J2AGENT_STORAGE_ENABLED=true
-J2AGENT_STORAGE_TYPE=minio
+J2AGENT_STORAGE_TYPE=rustfs
 J2AGENT_STORAGE_BUCKET=j2agent-files
 J2AGENT_STORAGE_ACCESS_MODE=proxy
-J2AGENT_S3_ENDPOINT=http://minio:9000
-J2AGENT_S3_ACCESS_KEY_ID=minioadmin
+J2AGENT_S3_ENDPOINT=http://rustfs:9000
+J2AGENT_S3_ACCESS_KEY_ID=rustfsadmin
 J2AGENT_S3_SECRET_ACCESS_KEY=change-me
 
 OSS_ENDPOINT=
@@ -135,7 +136,7 @@ QINIU_DOMAIN=
 QINIU_USE_HTTPS=true
 ```
 
-`type` 为 `minio` 或 `r2` 时填写 `J2AGENT_S3_*`；为 `oss` / `qiniu` 时填写对应供应商变量。Bucket 需提前创建（`type: minio` 除外，会自动建桶）。
+`type` 为 `rustfs`、`minio` 或 `r2` 时填写 `J2AGENT_S3_*`；为 `oss` / `qiniu` 时填写对应供应商变量。Bucket 需提前创建（`type: rustfs` / `minio` 除外，会自动建桶）。
 
 ## 3. 数据库表
 
@@ -172,7 +173,7 @@ QINIU_USE_HTTPS=true
 **直传（推荐）**
 
 1. 前端调用 `POST /files/upload/init`，传入虚拟目录前缀、文件名、Content-Type 和大小。
-2. 后端校验重名、写入 `UPLOADING` 台账，并签发上传凭证（MinIO/R2/阿里云 OSS 为预签名 PUT URL，七牛为 uploadToken）。
+2. 后端校验重名、写入 `UPLOADING` 台账，并签发上传凭证（RustFS/MinIO/R2/阿里云 OSS 为预签名 PUT URL，七牛为 uploadToken）。
 3. 浏览器直接将文件 PUT/POST 到对象存储，XHR 监听 `upload.onprogress` 显示进度。
 4. 上传成功后调用 `POST /files/upload/complete`，后端读取对象元数据并更新为 `READY`。该接口**幂等**：台账已是 `READY` 时重复调用直接返回成功。
 5. 上传失败时前端调用 `POST /files/upload/abort` 清理半成品对象和台账；若 OSS 已传完但 complete 失败，**不会**自动 abort，台账保持 `UPLOADING`，可重试 complete 或通过同步扫描处置。
@@ -199,7 +200,7 @@ QINIU_USE_HTTPS=true
 </CORSRule>
 ```
 
-MinIO 可在控制台或 `mc admin config set` 配置；阿里云 OSS 在 Bucket 跨域设置中配置。
+RustFS / MinIO 可在控制台或 `mc admin config set` 配置；阿里云 OSS 在 Bucket 跨域设置中配置。
 
 #### 后台延迟对账
 
@@ -424,7 +425,7 @@ sequenceDiagram
 5. 任一步失败时将台账标记为 `ERROR`，并投入 **删除补偿延迟队列**（配置与上传对账相同，见 `j2agent.storage.delete.reconcile`）；Worker 在 `DELETING`/`ERROR` 状态下重试删 OSS 与 DB，最多 20 次指数退避；耗尽后保留 `ERROR` 供人工处理。应用重启时会补投所有 `DELETING` 记录的对账任务。
 6. 批量删除会返回失败的对象键，其余对象继续处理。
 
-MinIO 使用以 `/` 结尾的零字节对象模拟目录。删除文件后，系统会向上检查并清理已经没有其他对象的目录标记，避免文件列表中残留空目录；目录中仍有文件或子目录时不会清理。
+RustFS / MinIO 等 S3 兼容存储可使用以 `/` 结尾的零字节对象模拟目录。删除文件后，系统会向上检查并清理已经没有其他对象的目录标记，避免文件列表中残留空目录；目录中仍有文件或子目录时不会清理。
 
 `delete`、`complete`、`abort` 与上传/删除对账 Worker 共用 per-objectKey 分布式锁。
 
@@ -553,4 +554,4 @@ ETag 比较前会去除首尾引号。最后修改时间按秒归一化后比较
 - 删除返回 `409 file is referenced by business data`：对象被聊天等场景引用，见 [聊天图片附件](聊天图片附件/README.md)。
 - 带图对话报 `InvalidParameter` / image format illegal：多为云端 LLM 无法访问内网预签名 URL；应使用从 OSS 读字节的实现，见 [聊天图片附件 §7.1](聊天图片附件/README.md#71-invalidparameter-the-image-format-is-illegal-and-cannot-be-opened)。
 
-自动化测试使用模拟对象存储，不依赖真实云凭证。MinIO、阿里云 OSS、七牛云 Kodo 和 Cloudflare R2 的真实凭证联调属于部署验收项。
+自动化测试使用模拟对象存储，不依赖真实云凭证。RustFS、MinIO、阿里云 OSS、七牛云 Kodo 和 Cloudflare R2 的真实凭证联调属于部署验收项。默认 Docker 部署不迁移旧 MinIO 数据；如确认不再需要，可由运维自行清理旧 `volumes/minio` 目录。

@@ -27,12 +27,12 @@
 
 | 值 | 说明 | 适用场景 |
 |---|---|---|
-| `proxy`（**默认**） | 聊天：`/chat/files/content?objectKey=...`；文件管理预览：`/files/content?object-key=...`；文件管理上传：`/files/upload/content?object-key=...`（PUT）；经应用服务器转发 | S3 `endpoint` 为内网地址（如 `127.0.0.1`、`minio:9000`），或需避免预签名 host 问题 |
+| `proxy`（**默认**） | 聊天：`/chat/files/content?objectKey=...`；文件管理预览：`/files/content?object-key=...`；文件管理上传：`/files/upload/content?object-key=...`（PUT）；经应用服务器转发 | S3 `endpoint` 为内网地址（如 `127.0.0.1`、`rustfs:9000`、`minio:9000`），或需避免预签名 host 问题 |
 | `direct` | 返回 OSS **预签名直链**（聊天 24h / 文件管理预览 15min / 上传 PUT 15min），浏览器直连对象存储 | `s3.endpoint` 本身已是浏览器可达地址 |
 
 该配置作用于聊天附件展示、文件管理预览/下载与浏览器直传上传凭证，不仅限于聊天场景。
 
-**direct 模式示例**（局域网 IP `192.168.3.4`，MinIO 映射端口 `19000`）：
+**direct 模式示例**（局域网 IP `192.168.3.4`，RustFS 映射端口 `19000`）：
 
 ```yaml
 j2agent:
@@ -52,7 +52,7 @@ J2AGENT_S3_ENDPOINT=http://192.168.3.4:19000
 **注意**：
 
 - 预签名 URL 的 host 由 `s3.endpoint` 决定；**不可**在前端把 URL 中的 host 改成别的地址（会破坏 SigV4 签名 → `SignatureDoesNotMatch`）。
-- Docker 内服务端常用 `http://minio:9000` 访问 MinIO，浏览器无法解析该 host，此类环境应使用 **proxy**（默认），不要指望 direct。
+- Docker 内服务端常用 `http://rustfs:9000` 访问 RustFS，浏览器无法解析该 host，此类环境应使用 **proxy**（默认），不要指望 direct。
 - direct 模式下若 OSS 直链仍失败，前端会自动降级为 content 代理（聊天 `/chat/files/content`，文件管理 `/files/content`）。
 
 ## 3. 数据模型
@@ -185,7 +185,7 @@ sequenceDiagram
 
 | 原因 | 说明 |
 |---|---|
-| 预签名 URL 不可达 | 旧实现将 MinIO 预签名 URL（如 `http://127.0.0.1:19000/...`）传给 DashScope 等云端 API，模型侧无法下载，返回 HTML/错误体，表现为「格式非法」。**当前实现已改为从 OSS 读字节投递。** |
+| 预签名 URL 不可达 | 旧实现将 S3 兼容存储预签名 URL（如 `http://127.0.0.1:19000/...`）传给 DashScope 等云端 API，模型侧无法下载，返回 HTML/错误体，表现为「格式非法」。**当前实现已改为从 OSS 读字节投递。** |
 | 文件本身损坏 | 上传中断或内容非真实图片。 |
 | MIME 与内容不符 | 浏览器上报 `Content-Type` 与实际字节不一致（少见）。 |
 | 不支持的格式 | 仅允许 JPEG/PNG/WebP；HEIC 等会被前端 `accept` 拦截，但若绕过上传仍会失败。 |
@@ -208,8 +208,8 @@ sequenceDiagram
 
 ### 9.4 历史图片无法显示 / SignatureDoesNotMatch
 
-- **proxy 模式（默认）**：聊天走 `/chat/files/content?objectKey=...`，文件管理预览走 `/files/content?object-key=...`，只需应用服务器可达，不依赖 MinIO 预签名。
-- **direct 模式**：预签名 host 来自 `s3.endpoint`，该地址须对浏览器可达（勿使用 `127.0.0.1`、`minio:9000` 等仅服务端可访问的 endpoint）；**禁止**在前端改写预签名 URL 的 host（会导致 `SignatureDoesNotMatch`）。
+- **proxy 模式（默认）**：聊天走 `/chat/files/content?objectKey=...`，文件管理预览走 `/files/content?object-key=...`，只需应用服务器可达，不依赖 RustFS / MinIO 预签名。
+- **direct 模式**：预签名 host 来自 `s3.endpoint`，该地址须对浏览器可达（勿使用 `127.0.0.1`、`rustfs:9000`、`minio:9000` 等仅服务端可访问的 endpoint）；**禁止**在前端改写预签名 URL 的 host（会导致 `SignatureDoesNotMatch`）。
 - DIRECT 模式 OSS 加载失败时，前端会自动降级为 content 代理。
 - 对象已被误删则无法恢复展示。
 
