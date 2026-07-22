@@ -107,6 +107,10 @@ OpenAPI 定义见 `j2agent-model/src/main/resources/openapi-model.yaml`：
 
 ## 5. 处理流程
 
+聊天图片的**上传、引用校验、投递 LLM**在 direct/proxy 下相同；两种模式只影响「后端下发给前端的展示 URL」以及「浏览器加载气泡图片」。
+
+### 5.1 proxy 模式（默认）
+
 ```mermaid
 sequenceDiagram
     participant UI as 浏览器
@@ -117,19 +121,47 @@ sequenceDiagram
     UI->>UI: 本地预览（blob URL，仅输入区）
     UI->>API: WebSocket ChatRequestDto + attachments.data（Base64）
     API->>OSS: putObject chat/userId/contextId/uuid_file
-    API-->>UI: NOTICE user-attachments-ready（展示 URL，见 access-mode）
     API->>API: validateAndReference + object_file_reference
+    API->>API: encode 记忆 meta_json.attachments（objectKey，不含 url）
     API->>OSS: getObject 读字节（仅 LLM 推理）
     API->>LLM: UserMessage.media（base64/Resource）
+    API->>API: displayUrl = /chat/files/content?objectKey=...
+    API-->>UI: NOTICE user-attachments-ready（content 代理 URL）
+    UI->>API: 气泡图片 GET /chat/files/content
+    API->>OSS: getObject 代理读取
+    API-->>UI: 图片字节
+```
+
+proxy 模式下，前端拿到的是稳定的应用服务器代理地址 `/v1/rest/j2agent/chat/files/content?objectKey=...`。浏览器不直接访问 OSS，应用服务器负责读取对象并返回图片字节。
+
+### 5.2 direct 模式
+
+```mermaid
+sequenceDiagram
+    participant UI as 浏览器
+    participant API as J2Agent
+    participant OSS as 对象存储
+    participant LLM as 视觉 LLM
+
+    UI->>UI: 本地预览（blob URL，仅输入区）
+    UI->>API: WebSocket ChatRequestDto + attachments.data（Base64）
+    API->>OSS: putObject chat/userId/contextId/uuid_file
+    API->>API: validateAndReference + object_file_reference
     API->>API: encode 记忆 meta_json.attachments（objectKey，不含 url）
-    alt direct 模式
-        UI->>OSS: 气泡 <img> 直连预签名 URL
-    else proxy 模式
-        UI->>API: 气泡 <img> GET /chat/files/content
+    API->>OSS: getObject 读字节（仅 LLM 推理）
+    API->>LLM: UserMessage.media（base64/Resource）
+    API->>OSS: 生成 24h 预签名 GET URL
+    API-->>UI: NOTICE user-attachments-ready（OSS 预签名 URL）
+    UI->>OSS: 气泡图片直连预签名 URL
+    OSS-->>UI: 图片字节
+    opt OSS 直链加载失败
+        UI->>API: 降级 GET /chat/files/content
+        API->>OSS: getObject 代理读取
+        API-->>UI: 图片字节
     end
 ```
 
-前端直接使用后端下发的 `attachment.url`；DIRECT 模式加载失败时降级 `/chat/files/content`。
+direct 模式下，前端拿到的是 OSS 预签名 GET URL（聊天气泡有效期 24h），浏览器直接访问 OSS。若直链加载失败，前端降级请求 `/chat/files/content`，由应用服务器代理读取。
 
 后端：`ChatAttachmentUrlResolver` 按 `access-mode` 生成展示 URL；`GET /context` 与 WS NOTICE 均经此解析。
 
