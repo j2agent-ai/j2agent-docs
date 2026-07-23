@@ -56,16 +56,18 @@ flowchart TB
 插件 Agent 的约定标识（由各实现自行覆盖）：
 
 - **`getAgentId()`**：全局唯一路由键。
-- **`getAgentName()` / `getAgentDescription()`**：供列表与卡片展示文案。
-- **`getOrchestrationPrompt()`**（可选）：编排提示词，仅供通用助手**被动意图召回**内部路由，**不**映射到 `AgentInfoDto`、不展示到界面；未实现时回退 `getAgentDescription()`。
+- **`getAgentName()` / `getAgentDescription()`**：插件内部必须返回 `I18nString`；平台按当前语言解析后，列表与卡片接口返回普通字符串；不支持旧版 `String` 返回值。
+- **`getOrchestrationPrompt()`**（可选）：编排提示词，仅供通用助手**被动意图召回**内部路由，**不**映射到 `AgentInfoDto`、不展示到界面；未实现时回退中文 `getAgentDescription()`。
 - **`getSort()`**：基类默认 100；可覆盖；`listRegisteredAgents` 按 **sort 升序、再 agentId 字典序**排序。
 - **`getLogo()`**：基类默认 `🤖`；可覆盖为自定义 emoji；经 `AgentInfoDto.logo` 供列表与聊天页展示（全局 `chatLogoUrl` 仍优先）。
 - **`getThinkingOverride()`**（可选）：Agent 级默认深度思考策略；默认 `USE_PROVIDER_DEFAULT`。单轮可被 WebSocket 消息体 `ChatRequestDto.thinkingMode` 覆盖（优先级更高）。
 
+运行时国际化由平台统一处理：HTTP 通过统一 Header 透传语言；WebSocket 通过连接查询参数 `locale=zh_CN|en_US` 透传语言，且该显式参数优先于浏览器自动携带的 `Accept-Language`。服务端解析进 `UserContextBo` 并随 `AgentRunContext` 传递。插件 Agent 可在 `AiAgent` 子类中使用 `currentUserContext()`、`currentLanguage()`、`currentLanguageIsEnglish()` 获取当前轮语言上下文；当当前语言为 `en_US` 时，`AiAgent#stream` 会在当前 Agent 的 `loadSystemPrompt()` 返回内容后追加 `Please output content in English.`，不按语言创建多份 Agent 实例。
+
 ## 4. HTTP：列出已注册智能体（界面卡片/下拉数据源）
 
-- **实现**：`ChatController#listAgents` 委托 `agentRouter.listRegisteredAgents()`。
-- **行为**：遍历已注册的 `AiAgent`，映射为 `AgentInfoDto`（`agentId`、`name`、`description`、`showHotQuestions`、`sort`、`logo`），按 **`sort` 升序、再 `agentId` 字典序**排序后封装为 `AgentInfoList`。
+- **实现**：`ChatController#listAgents` 委托 `agentRouter.listRegisteredAgents(language)`。
+- **行为**：遍历已注册的 `AiAgent`，按当前请求语言将内部 `I18nString` 解析为 `AgentInfoDto.name` / `description` 普通字符串，再按 **`sort` 升序、再 `agentId` 字典序**排序后封装为 `AgentInfoList`。
 - **OpenAPI**：`GET /v1/rest/j2agent/agents`，`operationId: listAgents`（见 `j2agent-model` 中 `openapi-interface.yaml`）。
 
 前端典型用法：启动或进入聊天页时请求该接口，用返回的 **`agentId`** 作为后续 WebSocket 与历史接口的 **`agent-id`**。
@@ -76,7 +78,8 @@ flowchart TB
 - **查询参数**（连接建立时解析）：
   - **`context-id`**：业务会话上下文 ID，必填。
   - **`agent-id`**：与目标 Agent 的 `getAgentId()` 一致，必填；缺失时服务端下发失败态事件并关闭连接。
-- **会话属性**：`agentId` 存入 WebSocket session，随后在 **`handleTextMessage`** 中随 `ChatRequestDto` 一并交给 **`ChatService#handleChat(..., agentId)`**。
+  - **`locale`**：当前语言，取值 `zh_CN` / `en_US`；用于写入 `UserContextBo.language`，供 Agent 运行时系统提示词与工具文案国际化使用。
+- **会话属性**：`agentId` 存入 WebSocket session，随后在 **`handleTextMessage`** 中随 `ChatRequestDto` 一并交给 **`ChatService#handleChat(..., userContext, agentId)`**。
 - **运行时选择**：`ChatService` 内 **`agentRouter.route(agentId)`** 得到具体 `AiAgent`，再按 [Agent 记忆机制](../agent记忆机制/README.md) / [对话记忆](../agent记忆机制/对话记忆.md) 组装 **`conversationId = userId:contextId:agentId`** 与 **`AgentRunContext`**，调用 **`AiAgent#stream`**。
 
 因此：**界面展示的「选中的智能体」必须落到连接上的 `agent-id` 与每条业务会话的 context**，才能保证记忆与历史与 `AgentRouter` 中的键一致。
@@ -97,7 +100,9 @@ flowchart TB
 1. Agent 类 **`@Component` + `extends AiAgent`**；同 JAR 内依赖 Bean 亦需 Spring 注解；**`getAgentId()`** 全局唯一。
 2. 将 tar.gz 解压到 **`j2agent.plugin.path`**，启动或 **`POST /v1/rest/j2agent/agents/reload`** 后确认 `loadedAgentIds` 含新 id。
 3. 前端列表与 WebSocket / 历史接口使用同一 **`agent-id`**（见 [Agent 记忆机制](../agent记忆机制/README.md)）。
-4. 若需兼容旧客户端字符串，在 **`AgentRouter#route`** 增加别名映射（旧别名 → 实际 `getAgentId()`）。
+4. `getAgentName()` 与 `getAgentDescription()` 返回 `I18nString`；平台不提供旧 `String` 签名兼容层。
+5. 如需按语言调整运行时逻辑，在 `AiAgent` 子类中调用 `currentLanguage()` / `currentUserContext()`，不要自行扩展接口参数。
+6. 若需兼容旧客户端字符串，在 **`AgentRouter#route`** 增加别名映射（旧别名 → 实际 `getAgentId()`）。
 
 ## 9. 关键代码位置索引
 
