@@ -11,9 +11,29 @@
 | 方法 | 说明 |
 |------|------|
 | `getAgentId()` | 全局唯一标识；与 WebSocket `agent-id`、DB/Redis 中 `agent_id` 一致 |
-| `getAgentName()` | 智能体展示名称（`GET /agents` 列表） |
-| `getAgentDescription()` | 智能体描述文案（`GET /agents` 列表展示） |
+| `getAgentName()` | 智能体展示名称定义；返回内部模型 `I18nString`，`GET /agents` 对外返回当前语言下的字符串 |
+| `getAgentDescription()` | 智能体描述文案定义；返回内部模型 `I18nString`，`GET /agents` 对外返回当前语言下的字符串 |
 | `loadSystemPrompt()` | 系统提示词；可从 classpath 读取或直接返回字符串 |
+
+`getAgentName()` 与 `getAgentDescription()` **只支持 `I18nString`，不保留 `String` 返回值兼容层**。当前只定义 `zh_CN`、`en_US` 两种文案：
+
+```java
+return new I18nString()
+        .zhCN("演示 Agent")
+        .enUS("Demo Agent");
+```
+
+前端通过统一语言标识告诉后端当前语言；后端列表接口返回已解析后的 `name` / `description` 字符串，不向 API 暴露 `I18nString`。
+
+Agent 运行时国际化由平台统一注入，不需要插件接口额外增加 language/locale 参数。前端通过统一 Header 透传 HTTP 语言；WebSocket 因浏览器无法自定义握手 Header，使用连接查询参数 `locale=zh_CN|en_US` 透传语言，且该显式参数优先于浏览器自动携带的 `Accept-Language`。平台解析后写入 `UserContextBo`，每轮调用时随 `AgentRunContext` 传递。插件 Agent 如需读取当前用户上下文或语言，可在 `AiAgent` 子类中调用：
+
+```java
+UserContextBo userContext = currentUserContext();
+String language = currentLanguage();
+boolean english = currentLanguageIsEnglish();
+```
+
+系统提示词按单轮运行时语言处理：`AiAgent#stream` 每轮读取 `UserContextBo.language`，若当前语言为 `en_US`，则在当前 Agent 的 `loadSystemPrompt()` 返回内容后追加英文约束 `Please output content in English.`；平台只保留一个底层 Agent 实例，不会按语言创建多份实例。
 
 `getAgentDescription()` 与可选的 `getOrchestrationPrompt()`（编排提示词）分工：
 
@@ -78,6 +98,7 @@
 ```java
 package io.github.jerryt92.j2agent.demo;
 
+import io.github.jerryt92.j2agent.model.I18nString;
 import io.github.jerryt92.j2agent.service.llm.agent.inf.AiAgent;
 import org.springframework.stereotype.Component;
 
@@ -93,13 +114,17 @@ public class DemoAgent extends AiAgent {
     }
 
     @Override
-    public String getAgentName() {
-        return "演示 Agent";
+    public I18nString getAgentName() {
+        return new I18nString()
+                .zhCN("演示 Agent")
+                .enUS("Demo Agent");
     }
 
     @Override
-    public String getAgentDescription() {
-        return "最小接入示例，用于验证插件加载与对话链路。";
+    public I18nString getAgentDescription() {
+        return new I18nString()
+                .zhCN("最小接入示例，用于验证插件加载与对话链路。")
+                .enUS("Minimal integration example for validating plugin loading and chat flow.");
     }
 
     @Override
@@ -126,7 +151,7 @@ public class DemoAgent extends AiAgent {
 
 ```markdown
 你是演示助手。
-- 回答使用中文。
+- 回答应简洁准确。
 - 不确定时明确说明，不要编造。
 ```
 
