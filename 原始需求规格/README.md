@@ -1,7 +1,7 @@
 # 原始需求规格
 
 > 本文档由 j2agent-docs 专题文档与 j2agent 代码反向归纳，非项目启动时的正式 SRS。
-> 最后更新：2026-06-10
+> 最后更新：2026-07-23
 
 ## 1. 范围与说明
 
@@ -72,6 +72,8 @@
 | REQ-PLAT-011 | 平台 | 邮箱注册与找回密码 | 邮箱自助注册（开关+白名单）；SMTP 发信；邮箱验证码找回密码。 | — | 已实现 | [PLAT-SEC-007~010](#plat-sec) | [邮箱注册机制](../平台/安全与用户/邮箱注册机制.md) | `RegisterController`, `ResetPasswordController`, `EmailRegisterService` |
 | REQ-PLAT-012 | 平台 | 对象存储与文件管理 | 多 OSS 供应商；浏览器直传；上传/删除对账；OSS-DB 差异检查与人工处置。 | — | 已实现 | [PLAT-FILE-001~008](#plat-file) | [文件管理与对象存储](../平台/文件管理与对象存储/README.md) | `FileManagementController`, `ObjectStorageService` |
 | REQ-PLAT-013 | 平台 | 聊天图片附件 | 对话图片上传（限 4 张）；proxy/direct 访问模式；WebSocket Base64 发送；删除会话 OSS 清理。 | — | 已实现 | [PLAT-IMG-001~005](#plat-img) | [聊天图片附件](../平台/聊天图片附件/README.md) | `ChatFileController`, `ChatAttachmentService` |
+| REQ-PLAT-014 | 平台 | 通用AI助手与知识库问答助手 | `universal_assistant` 展示为通用AI助手；新增 `knowledge_qa_assistant` 复用聊天页并支持多选知识库问答、前后端必选校验与 RAG 来源展示。 | — | 已实现 | [PLAT-RAG-015](#plat-rag), [PLAT-PLUGIN-007](#plat-plugin) | [平台通用助手](../平台/通用助手/README.md) | `UniversalAssistantConstants`, `KnowledgeQaAssistantAgent`, `ChatService`, `ChatView.vue` |
+| REQ-PLAT-015 | 平台 | 远程知识库名称 | 远程知识库创建/编辑时支持配置展示名称，前端按 `知识库名称 (collectionId)` 显示；名称存入远程仓库 `protocol_config.display_name`，不改变真实 collection id。 | — | 已实现 | [PLAT-RAG-016](#plat-rag) | [知识库维护](../平台/RAG机制/知识库维护/README.md) | `KnowledgeRepositoryService`, `KnowledgeRepositoryDtos`, `KnowledgeRepositoryList.vue` |
 
 ### 2.2 前端
 
@@ -81,6 +83,7 @@
 | REQ-FE-002 | 前端 | Markdown 气泡与图表懒加载 | markdown-it 同步渲染；mermaid/plantuml/vega-lite 围栏懒加载；流式推迟图表渲染。 | — | 已实现 | [FE-MD-001~007](#fe-md) | [Markdown 解析器](../前端/md解析器/README.md) | `src/pages/chat/ts/markdown/` |
 | REQ-FE-003 | 前端 | Agent 状态机 UI 消费 | useAgentEventDispatcher + agentRendererRegistry + AgentTurnTimeline 消费 WebSocket 事件。 | — | 已实现 | [FE-UI-001~002](#fe-ui) | [Agent-UI 交互机制](../平台/agent-ui交互机制/README.md) §4 | `src/pages/chat/ts/agent/` |
 | REQ-FE-004 | 前端 | 热门问题 UI | 空会话展示热门问题；不写入 MessageDto 气泡。 | — | 已实现 | [FE-UI-003](#fe-ui), [PLAT-UI-008](#plat-ui) | [Agent-UI 交互机制](../平台/agent-ui交互机制/README.md) | `src/pages/chat/ts/` 热门问题组件 |
+| REQ-FE-005 | 前端 | 知识库问答多选 UI | 通用知识库问答助手输入区展示单个省略号下拉，左侧复选框多选 collection，未选阻止发送，按钮显示已选数量并记住最近有效选择。 | — | 已实现 | [PLAT-RAG-015](#plat-rag) | [平台通用助手](../平台/通用助手/README.md) | `src/pages/chat/components/ChatView.vue`, `src/pages/chat/ts/session/` |
 
 ### 2.3 Agent 开发
 
@@ -111,7 +114,7 @@ flowchart TB
   main --> platLLM[PLAT-LLM 001-005]
   main --> platCHAT[PLAT-CHAT 001-006]
   main --> platUI[PLAT-UI 001-010]
-  main --> platPLUGIN[PLAT-PLUGIN 001-006]
+  main --> platPLUGIN[PLAT-PLUGIN 001-007]
   main --> platFILE[PLAT-FILE 001-008]
   main --> platIMG[PLAT-IMG 001-005]
   main --> fe[FE-TASK/MD/UI]
@@ -145,6 +148,8 @@ flowchart TB
 | PLAT-RAG-012 | 静态文件 URL 改写 | 入库前将相对图片路径转为 /v1/rest/j2agent/file/repo/**；外链不变 | 已实现 | [静态文件展示机制.md](../平台/RAG机制/静态文件展示机制.md) | `KnowledgeRepoSyncService` |
 | PLAT-RAG-013 | 知识库静态文件 HTTP 直链 | GET /file/repo/** 按 root-path 读取；越界拒绝；Content-Type 按后缀映射 | 已实现 | 同上 | `FileController` |
 | PLAT-RAG-014 | 知识库管理 REST API | 同步接口最长等待 10 分钟；需 ADMIN；支持 fullRebuild 参数 | 已实现 | [知识库维护.md](../平台/RAG机制/知识库维护/知识库维护.md) | `KnowledgeController` |
+| PLAT-RAG-015 | 通用知识库问答助手多 collection 检索 | `knowledge_qa_assistant` 请求必须携带非空 `knowledgeCollections`；运行时按所选 collection 分别检索并合并去重，继续发布 RAG 来源 | 已实现 | [平台通用助手](../平台/通用助手/README.md) | `KnowledgeQaAssistantAgent`, `DynamicKnowledgeCollectionsRetriever`, `ChatService` |
+| PLAT-RAG-016 | 远程知识库展示名称 | 仅远程知识库可配置知识库名称；新增和编辑时均可填写；名称落库在 `protocol_config.display_name`，读取兼容旧 `protocol_config.alias`，可选精确覆盖为 `protocol_config.collectionAliases`；展示为 `知识库名称 (collectionId)`，请求和检索仍使用真实 collection id | 已实现 | [知识库维护](../平台/RAG机制/知识库维护/README.md) | `KnowledgeRepositoryService`, `KnowledgeRepositoryList.vue`, `ChatView.vue` |
 
 ### 4.2 平台 — 安全与用户 {#plat-sec}
 
@@ -201,11 +206,12 @@ flowchart TB
 | 需求编号 | 需求名称 | 需求描述 | 状态 | 文档来源 | 代码验证 |
 |----------|----------|----------|------|----------|----------|
 | PLAT-PLUGIN-001 | 插件 JAR 动态加载 | tar.gz 解压到 plugin.path；AgentPluginRegistry 扫描 Spring 组件；支持热重载 | 已实现 | [插件 Agent 接入与界面](../平台/插件Agent接入与界面/README.md) | `AgentPluginRegistry`, `AgentPluginInstallService` |
-| PLAT-PLUGIN-002 | AgentRouter 路由 | List&lt;AiAgent&gt; 聚合；route(agentId)；可选历史别名映射 | 已实现 | 同上 | `AgentRouter` |
+| PLAT-PLUGIN-002 | AgentRouter 路由 | List&lt;AiAgent&gt; 聚合；route(agentId)；assistant→chat_assistant 别名 | 已实现 | 同上 | `AgentRouter` |
 | PLAT-PLUGIN-003 | GET /agents 列表 | 返回 agentId/name/description/showHotQuestions；按 agentId 字典序 | 已实现 | 同上 | `ChatController` |
 | PLAT-PLUGIN-004 | WebSocket 对话通道 | /ws/rest/j2agent/chat?context-id=&agent-id= | 已实现 | 同上 | `ChatController` |
 | PLAT-PLUGIN-005 | MCP 刷新 Agent 重建 | McpToolCallbacksRefreshedEvent → 全部 AiAgent rebuildAgent() | 已实现 | 同上 | `McpToolCallbacksRefreshedListener` |
 | PLAT-PLUGIN-006 | 列表按 getSort() 排序 | 当前未消费 getSort()；若前端需业务优先级需单独约定 | 规划中 | 同上 §3 | — |
+| PLAT-PLUGIN-007 | 内置助手路由隔离 | `universal_assistant` 与 `knowledge_qa_assistant` 为平台内置助手；不出现在专业 Agent 列表，不参与可调用子智能体候选；历史会话按 agentId 隔离 | 已实现 | [平台通用助手](../平台/通用助手/README.md) | `UniversalAssistantConstants`, `AgentRouter`, `ChatContextService` |
 
 ### 4.7 平台 — 文件管理与对象存储 {#plat-file}
 
